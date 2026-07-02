@@ -4,8 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kongre Yönetimi Sistemi</title>
-  <script src="https://unpkg.com/streamlit-component-lib@1.4.0/dist/index.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
   (function () {
     if (window.streamlitComponentLib && window.streamlitComponentLib.Streamlit) return;
@@ -23,6 +21,7 @@
       events.dispatchEvent(new CustomEvent(Streamlit.RENDER_EVENT, { detail: data }));
     });
     window.streamlitComponentLib = { Streamlit };
+    try { Streamlit.setComponentReady(); Streamlit.setFrameHeight(window.innerHeight || 720); } catch(e) {}
   })();
   </script>
   <style>
@@ -699,6 +698,20 @@
     async function saveAdminUser(e,id=""){ e.preventDefault(); const users=getUsers(); const username=$("a_username").value.trim().toLowerCase(); if(!username){toast("Kullanıcı adı zorunlu.");return;} if(users.some(u=>u.username.toLowerCase()===username && u.id!==id)){toast("Bu kullanıcı adı zaten var.");return;} const pass=$("a_password").value; const old=id?users.find(u=>u.id===id):null; const user={...(old||{}),id:id||uid(),username,fullName:$("a_fullName").value.trim(),role:$("a_role").value,title:$("a_title").value,department:$("a_department").value,email:$("a_email").value,phone:$("a_phone").value,active:old?.active??true}; if(pass) user.passwordHash=await sha256(pass); if(!user.passwordHash){toast("Şifre zorunlu.");return;} const next=id?users.map(u=>u.id===id?user:u):[user,...users]; saveUsers(next); log(id?"user_update":"user_create","Admin",username); toast("Kullanıcı kaydedildi. Personel listelerinde görünür."); showAdmin(); }
     function toggleAdminUser(id){ const users=getUsers(); const next=users.map(u=>u.id===id?{...u,active:!u.active}:u); saveUsers(next); log("user_toggle","Admin",id); showAdmin(); }
     function saveAdminPrompts(e){ e.preventDefault(); const promptEls=[...document.querySelectorAll('[id^="prompt_"]')]; const aiPrompts={}; promptEls.forEach(el=>{ const k=el.id.replace('prompt_',''); aiPrompts[k]=el.value; }); saveSettings({aiPrompts}); log("ai_prompt_update","Admin","Promptlar"); toast("AI promptları kaydedildi."); showAdmin(); }
+
+    function sheetHeaders(key){ const m=MODULES[key]; return ['Kayıt No',...m.fields.map(f=>f[1])]; }
+    function formatForSheet(v){ if(v==null)return ''; if(Array.isArray(v))return v.map(x=>x.name?`${x.name} | Adet:${x.quantity||0} | Birim:${x.unitPrice||0} | KDV Dahil:${x.vatIncluded||0}`:JSON.stringify(x)).join('\n'); if(typeof v==='object')return Object.entries(v).map(([k,val])=>`${k}: ${val}`).join('\n'); return v; }
+    function rowToSheet(key,row){ const m=MODULES[key]; const obj={'Kayıt No':row.no||''}; m.fields.forEach(f=>obj[f[1]]=formatForSheet(row[f[0]]??'')); return obj; }
+    function downloadTemplate(key){ const m=MODULES[key]; const rows=[Object.fromEntries(sheetHeaders(key).map(h=>[h,'']))]; writeWorkbook(`${m.nav} Bos Sablon.xlsx`, `${m.prefix}_sablon`, rows); }
+    function exportExcel(key){ const rows=getList(key).map(r=>rowToSheet(key,r)); if(!rows.length) rows.push(Object.fromEntries(sheetHeaders(key).map(h=>[h,'']))); writeWorkbook(`${MODULES[key].nav}.xlsx`, key, rows); }
+    function writeWorkbook(filename,sheetName,rows){ if(window.XLSX){ const ws=XLSX.utils.json_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,sheetName.slice(0,31)); XLSX.writeFile(wb,filename); return; } const csv=rowsToCsv(rows); downloadBlob(filename.replace('.xlsx','.csv'),csv,'text/csv;charset=utf-8'); }
+    function rowsToCsv(rows){ const heads=Object.keys(rows[0]||{}); return [heads.join(';'),...rows.map(r=>heads.map(h=>`"${String(r[h]??'').replaceAll('"','""')}"`).join(';'))].join('\n'); }
+    function downloadBlob(filename,content,type){ const blob=new Blob([content],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href); }
+    function importExcel(key){ const inp=document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.xls,.csv'; inp.onchange=()=>handleImportFile(key,inp.files[0]); inp.click(); }
+    function handleImportFile(key,file){ if(!file)return; const reader=new FileReader(); reader.onload=e=>{ try{ let data=[]; if(window.XLSX && !file.name.toLowerCase().endsWith('.csv')){ const wb=XLSX.read(e.target.result,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; data=XLSX.utils.sheet_to_json(ws,{defval:''}); } else { const text=new TextDecoder('utf-8').decode(new Uint8Array(e.target.result)); const lines=text.split(/\r?\n/).filter(Boolean); const heads=(lines.shift()||'').split(';').map(x=>x.replace(/^"|"$/g,'')); data=lines.map(line=>Object.fromEntries(line.split(';').map((v,i)=>[heads[i],v.replace(/^"|"$/g,'')]))); } const m=MODULES[key]; const rows=store.get(KEYS[key],[]); const mapped=data.filter(x=>Object.values(x).some(Boolean)).map(src=>{ const r={id:uid(),no:src['Kayıt No']||seqNo(m.prefix,key),createdAt:dateTime(),createdBy:state.currentUser.fullName,updatedAt:dateTime(),updatedBy:state.currentUser.fullName,isDeleted:false}; m.fields.forEach(f=>{ const val=src[f[1]] ?? src[f[0]] ?? ''; if(f[2]==='number') r[f[0]]=Number(val||0); else if(f[2]==='serviceItems') r[f[0]]=String(val||'').split('\n').filter(Boolean).map(line=>({name:line})); else r[f[0]]=val; }); if(key==='risks') r.level=riskLevel(r); return r; }); saveList(key,[...mapped,...rows]); log('import',m.nav,`${mapped.length} kayıt`); toast(`${mapped.length} kayıt içe aktarıldı.`); showModule(key); }catch(err){toast('İçe aktarma hatası: '+err.message);} }; reader.readAsArrayBuffer(file); }
+    function exportPdf(key){ const m=MODULES[key]; const rows=getList(key); const html=`<div><h2>${esc(m.nav)}</h2><p>${esc(m.sub)}</p>${rows.length?rows.map(r=>`<div class="panel" style="margin-bottom:12px"><h3>${esc(r.no||'Kayıt')}</h3><div class="detail-grid">${m.fields.map(f=>`<div>${esc(f[1])}</div><div>${fancyValue(r[f[0]])}</div>`).join('')}</div></div>`).join(''):'<div class="empty">Kayıt bulunmuyor.</div>'}</div>`; openModal(`${m.nav} PDF Hazırlık`, html, `<button class="btn secondary" onclick="App.printCurrentView()">Yazdır / PDF Kaydet</button><button class="btn ghost" onclick="App.closeModal()">Kapat</button>`); }
+    function printCurrentView(){ window.print(); }
+
     function exportCsv(key){ exportExcel(key); }
     function showForgotPassword(){ openModal("Şifremi Unuttum", `<p>Bu sürümde şifre sıfırlama sistem yöneticisi tarafından yapılır.</p><p class="muted">İlk kullanıcı için kullanıcı adı <b>admin</b>, şifre <b>Turkak2026!</b>.</p>`, `<button class="btn ghost" onclick="App.closeModal()">Kapat</button>`); }
     function openModal(title,body,footer=""){ $("modalTitle").textContent=title; $("modalBody").innerHTML=body; $("modalFooter").innerHTML=footer||`<button class="btn ghost" onclick="App.closeModal()">Kapat</button>`; $("modalBackdrop").classList.remove("hidden"); }
