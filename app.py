@@ -90,4 +90,3 @@ iframe[title="kongre_yonetimi_sistemi"] {
 component_dir = Path(__file__).parent.resolve()
 kongre_component = components.declare_component("kongre_yonetimi_sistemi", path=str(component_dir))
 kongre_component(key="kongre_yonetimi_sistemi", default=None)
-
