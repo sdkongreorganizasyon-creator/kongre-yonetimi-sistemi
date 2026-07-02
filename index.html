@@ -376,6 +376,81 @@
       .page-actions{left:auto!important;right:auto!important;bottom:auto!important;}
     }
 
+
+    /* --- Targeted update v6: toolbar embedded into panel; no floating/auto-spaced action bar --- */
+    #view.view{
+      display:block!important;
+      flex-direction:initial!important;
+      padding:14px 18px 28px!important;
+      overflow:auto!important;
+      min-height:0!important;
+    }
+    #recordForm,
+    #profileForm{
+      display:block!important;
+      min-height:0!important;
+    }
+    .module-list-panel{
+      margin-top:0!important;
+    }
+    #view.view > .page-actions,
+    #recordForm > .page-actions,
+    #profileForm > .page-actions,
+    .panel > .page-actions,
+    .section-card > .page-actions,
+    .page-actions{
+      position:static!important;
+      left:auto!important;
+      right:auto!important;
+      top:auto!important;
+      bottom:auto!important;
+      z-index:auto!important;
+      width:auto!important;
+      max-width:100%!important;
+      min-height:0!important;
+      height:auto!important;
+      margin:0 0 12px 0!important;
+      padding:0!important;
+      background:transparent!important;
+      border:0!important;
+      border-radius:0!important;
+      box-shadow:none!important;
+      backdrop-filter:none!important;
+      -webkit-backdrop-filter:none!important;
+      align-self:auto!important;
+      display:flex!important;
+      justify-content:flex-start!important;
+      align-items:center!important;
+      flex-wrap:wrap!important;
+      gap:8px!important;
+    }
+    #recordForm > .page-actions,
+    #profileForm > .page-actions,
+    #view.view > .page-actions{
+      margin-top:12px!important;
+      margin-bottom:0!important;
+    }
+    .panel > .page-actions{
+      margin-top:0!important;
+      margin-bottom:12px!important;
+    }
+    .page-actions .btn{
+      height:auto!important;
+      min-height:0!important;
+      white-space:nowrap!important;
+    }
+    .page-actions .btn:not(.small){
+      padding:11px 15px!important;
+      border-radius:14px!important;
+      font-size:inherit!important;
+    }
+    .page-actions .btn.small{
+      padding:8px 10px!important;
+      border-radius:11px!important;
+      font-size:12px!important;
+      box-shadow:none!important;
+    }
+
   </style>
 </head>
 <body>
@@ -496,7 +571,7 @@
     function commandInsights(){ const orgs=getList("organizations"), invoices=getList("invoices"), contracts=getList("contracts"), budgets=getList("budgets"), risks=getList("risks"), suppliers=getList("suppliers"), communications=getList("communications"), offers=getList("offers"); const insights=[]; const criticalWork=risks.filter(x=>x.status!=="Kapandı" && ["Kritik","Yüksek"].includes(riskLevel(x))).length; insights.push({title:`Bugün kritik ${criticalWork} iş var.`,hint:"Yüksek/kritik açık risk toplamı.",fn:"showModule('risks')"}); const overdueContracts=contracts.filter(x=>x.status!=="İmzalandı" && x.endDate && daysUntil(x.endDate)<0).length; insights.push({title:`${overdueContracts} sözleşme gecikmiş veya süresi geçmiş.`,hint:"İmzalanmamış ve bitiş tarihi geçmiş sözleşmeler.",fn:"showModule('contracts')"}); const overdueInvoices=invoices.filter(x=>x.dueDate && daysUntil(x.dueDate)<0 && Number(x.paidAmount||0)<Number(x.amount||0)).length; insights.push({title:`${overdueInvoices} tahsilat vadesi geçmiş.`,hint:"Bekleyen tahsilatları Faturalar & Tahsilat modülünden kontrol edin.",fn:"showModule('invoices')"}); const budgetRisk=budgets.filter(x=>Number(x.actualExpense||0)>Number(x.plannedBudget||0) && Number(x.plannedBudget||0)>0); insights.push({title:budgetRisk[0]?`${budgetRisk[0].organization} organizasyonunda bütçe aşımı riski var.`:"Bütçe aşımı riski olan organizasyon görünmüyor.",hint:budgetRisk[0]?`Planlanan ${money(budgetRisk[0].plannedBudget)}, gerçekleşen gider ${money(budgetRisk[0].actualExpense)}.`:"Finans & Bütçe kayıtları güncellendikçe takip edilir.",fn:"showModule('budgets')"}); const weakPay=invoices.reduce((m,x)=>{const due=x.dueDate&&daysUntil(x.dueDate)<0&&Number(x.paidAmount||0)<Number(x.amount||0); if(due)m[x.customer]=(m[x.customer]||0)+1; return m;},{}); const weak=Object.entries(weakPay).sort((a,b)=>b[1]-a[1])[0]; insights.push({title:weak?`${weak[0]} müşterisinin ödeme davranışı bozulmuş.`:"Müşteri ödeme davranışında belirgin bozulma yok.",hint:weak?`${weak[1]} geciken tahsilat kaydı var.`:"Geciken tahsilatlar bu alanda izlenir.",fn:"showModule('invoices')"}); const lowSupplier=suppliers.filter(x=>Number(x.score||0)>0).sort((a,b)=>Number(a.score)-Number(b.score))[0]; insights.push({title:lowSupplier?`${lowSupplier.supplier} tedarikçinin teslim performansı düşmüş.`:"Tedarikçi performansında düşük skor görünmüyor.",hint:lowSupplier?`Performans puanı: ${lowSupplier.score}.`:"Tedarikçi puanı girildikçe takip edilir.",fn:"showModule('suppliers')"}); const staff={}; [...orgs,...risks,...communications].forEach(x=>[x.coordinator,x.assistant,x.owner,x.responsible].filter(Boolean).forEach(u=>staff[u]=(staff[u]||0)+1)); const busiest=Object.entries(staff).sort((a,b)=>b[1]-a[1])[0]; insights.push({title:busiest?`Bu hafta en yoğun personel ${busiest[0]}.`:"Personel iş yükü için yeterli kayıt yok.",hint:busiest?`${busiest[1]} açık/bağlı kayıt görünüyor.`:"Personel alanları dolduruldukça hesaplanır.",fn:"showPerformance"}); const profit=profitRows()[0]; insights.push({title:profit?`Bu ay en kârlı organizasyon: ${profit.organization}.`:"Kârlı organizasyon analizi için finans verisi bekleniyor.",hint:profit?`Brüt kâr: ${money(profit.grossProfit)}, marj: ${profit.margin}%.`:"Kârlılık Analizi modülünü kullanın.",fn:"showProfitability"}); const won=offers.filter(x=>x.status==="Kabul Edildi"||x.status==="Organizasyona Dönüştürüldü").length; insights.push({title:`Teklif kazanım oranı ${offers.length?Math.round(won/offers.length*100):0}%.`,hint:`${won}/${offers.length} teklif kazanılmış veya organizasyona dönüşmüş.`,fn:"showModule('offers')"}); return insights; }
     function commandCenterHtml(compact=false){ const list=commandInsights(); return `<div class="panel" style="margin-bottom:18px"><div class="section-title"><div><h3>Komuta Merkezi</h3><p class="muted">Yöneticiyi uyaran kritik durum ekranı.</p></div><button class="btn secondary small" onclick="App.showCommandCenter()">Detaylı Gör</button></div><div class="command-list">${list.slice(0,compact?6:list.length).map(x=>`<div class="command-alert"><strong>${esc(x.title)}</strong><span>${esc(x.hint)}</span><div style="margin-top:10px"><button class="btn ghost small" onclick="App.${x.fn}()">İlgili Modüle Git</button></div></div>`).join("")}</div></div>`; }
     function showCommandCenter(){ state.viewKey="command"; setTitle("Komuta Merkezi","Yönetici uyarıları ve karar destek ekranı"); $("view").innerHTML=`<div class="page-head motto-head"><div class="motto-title"><p>Bugünün kritik işleri, riskleri, tahsilatları ve operasyon uyarıları</p></div></div>${commandCenterHtml(false)}${moduleActions(`<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`)}`; }
-    function showModule(key){ state.viewKey=key; state.activeModule=key; const m=MODULES[key]; setTitle(m.title,m.sub); $("view").innerHTML=`<div class="page-head motto-head"><div class="motto-title"><p>${esc(m.sub)}</p></div></div>${moduleActions(moduleButtons(key))}<div class="panel"><div class="filters"><div class="field"><label>Arama</label><input id="moduleSearch" oninput="App.renderModuleRows('${key}')" placeholder="${esc(m.search)}"></div><div class="field"><label>Durum / kategori</label><select id="moduleFilter" onchange="App.renderModuleRows('${key}')"><option value="">Tümü</option>${filterOptions(key).map(x=>`<option>${esc(x)}</option>`).join("")}</select></div><div class="field"><label>Başlangıç</label><input id="dateStart" type="date" onchange="App.renderModuleRows('${key}')"></div><div class="field"><label>Bitiş</label><input id="dateEnd" type="date" onchange="App.renderModuleRows('${key}')"></div><button class="btn secondary small" onclick="App.showModuleForm('${key}')">Yeni Kayıt</button></div><div id="moduleRows"></div></div>`; renderModuleRows(key); }
+    function showModule(key){ state.viewKey=key; state.activeModule=key; const m=MODULES[key]; setTitle(m.title,m.sub); $("view").innerHTML=`<div class="page-head motto-head"><div class="motto-title"><p>${esc(m.sub)}</p></div></div><div class="panel module-list-panel">${moduleActions(moduleButtons(key))}<div class="filters"><div class="field"><label>Arama</label><input id="moduleSearch" oninput="App.renderModuleRows('${key}')" placeholder="${esc(m.search)}"></div><div class="field"><label>Durum / kategori</label><select id="moduleFilter" onchange="App.renderModuleRows('${key}')"><option value="">Tümü</option>${filterOptions(key).map(x=>`<option>${esc(x)}</option>`).join("")}</select></div><div class="field"><label>Başlangıç</label><input id="dateStart" type="date" onchange="App.renderModuleRows('${key}')"></div><div class="field"><label>Bitiş</label><input id="dateEnd" type="date" onchange="App.renderModuleRows('${key}')"></div><button class="btn secondary small" onclick="App.showModuleForm('${key}')">Yeni Kayıt</button></div><div id="moduleRows"></div></div>`; renderModuleRows(key); }
     function filterOptions(key){ const rows=getList(key); return [...new Set(rows.flatMap(r=>[r.status,r.category,r.segment,r.serviceStatus,r.stockStatus,r.planType,r.channel].filter(Boolean)))].sort(); }
     function renderModuleRows(key){ const m=MODULES[key]; let rows=getList(key); const q=($("moduleSearch")?.value||"").toLowerCase(); const f=$("moduleFilter")?.value||""; const ds=$("dateStart")?.value||""; const de=$("dateEnd")?.value||""; if(q) rows=rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q)); if(f) rows=rows.filter(r=>Object.values(r).includes(f)); if(ds||de){ rows=rows.filter(r=>{const d=r.startDate||r.offerDate||r.eventDate||r.communicationDate||r.invoiceDate||r.signDate||r.deliveryDate||r.useDate||r.checkIn||r.targetDate||r.updatedDate||r.createdAt?.slice(0,10)||""; return (!ds||d>=ds)&&(!de||d<=de);}); } rows.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))); if(!rows.length){$("moduleRows").innerHTML=`<div class="empty">Kayıt bulunamadı. Yeni kayıt eklemek için alttaki Yeni Kayıt butonunu kullanabilirsiniz.</div>`;return;} $("moduleRows").innerHTML=`<div class="table-wrap"><table><thead><tr>${m.cols.map(c=>`<th>${esc(c[1])}</th>`).join("")}<th>İşlem</th></tr></thead><tbody>${rows.map(r=>`<tr>${m.cols.map(c=>`<td>${valueFor(r,c)}</td>`).join("")}<td><div class="btn-row"><button class="btn secondary small" onclick="App.openDetail('${key}','${r.id}')">Detay</button><button class="btn ghost small" onclick="App.showModuleForm('${key}','${r.id}')">Düzenle</button>${canDelete()?`<button class="btn ghost small" onclick="App.deleteRecord('${key}','${r.id}')">Sil</button>`:""}</div></td></tr>`).join("")}</tbody></table></div>`; }
     function normalizedEquipment(v){ if(!v)return {}; if(typeof v==="object"&&!Array.isArray(v))return v; try{const p=JSON.parse(v); return p&&typeof p==="object"?p:{};}catch{return {};}}
