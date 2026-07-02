@@ -40,6 +40,20 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
     margin: 0 !important;
     padding: 0 !important;
 }
+
+/* Additional fullscreen hardening for Streamlit wrapper */
+.stApp, .main, .block-container, section.main, div[data-testid="stVerticalBlock"], div[data-testid="stElementContainer"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+div[data-testid="stIFrame"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
 </style>
 """,
     unsafe_allow_html=True,
