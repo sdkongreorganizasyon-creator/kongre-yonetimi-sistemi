@@ -67,9 +67,9 @@
     /* Kullanıcı talebine göre görsel düzenleme: sabit gömülü menü, minimal formlar, degrade arka plan */
     html,body{background:linear-gradient(135deg,#fff7f8 0%,#f7f8fb 42%,#eef4ff 100%) !important;}
     .app{grid-template-columns:258px 1fr;background:linear-gradient(135deg,#fff7f8 0%,#f7f8fb 48%,#eef4ff 100%);}
-    .sidebar{background:linear-gradient(180deg,rgba(255,255,255,.94) 0%,rgba(255,247,249,.92) 100%);padding:12px 10px;gap:9px;overflow:hidden;box-shadow:18px 0 44px rgba(148,34,54,.07);}
-    .side-brand{padding:6px 6px 10px;gap:9px}.side-brand .logo-mark{width:42px;height:42px;border-radius:13px;font-size:13px}.side-brand strong{font-size:14px}.side-brand span{font-size:10px}
-    .nav{gap:2px;overflow:hidden;padding:0}.nav button{border-radius:10px;padding:6px 8px;font-size:11.2px;font-weight:500;letter-spacing:.01em;line-height:1.2}
+    .sidebar{background:linear-gradient(180deg,rgba(255,255,255,.94) 0%,rgba(255,247,249,.92) 100%);padding:10px 9px;gap:6px;overflow:hidden;box-shadow:18px 0 44px rgba(148,34,54,.07);}
+    .side-brand{padding:5px 6px 7px;gap:8px}.side-brand .logo-mark{width:38px;height:38px;border-radius:12px;font-size:12px}.side-brand strong{font-size:12.5px}.side-brand span{font-size:9.2px}
+    .nav{flex:1;min-height:0;gap:1px;overflow:hidden!important;padding:0!important;scrollbar-width:none!important}.nav button{border-radius:8px;padding:4px 6px;font-size:10.2px;font-weight:500;letter-spacing:0;line-height:1.05;min-height:22px;white-space:nowrap;overflow:hidden}
     .topbar{height:66px;background:rgba(255,255,255,.88);backdrop-filter:blur(10px);padding:0 18px}.topbar h1{font-size:19px;font-weight:700}.topbar .sub{font-size:11.5px}.user-chip{padding:4px 8px 4px 5px}.avatar{width:30px;height:30px;font-size:12px}
     .view{padding:14px 18px 84px;background:linear-gradient(135deg,rgba(255,255,255,.32),rgba(239,246,255,.36));}
     .page-head{margin-bottom:10px}.motto-head{justify-content:flex-start;text-align:left}.motto-title p{font-size:12.5px;font-weight:500;color:#64748b;margin:0}.motto-title p:after{display:none}.page-head h2{font-size:20px}.page-head p{font-size:12px}
@@ -93,7 +93,7 @@
     .topbar .user-chip .avatar{width:26px;height:26px;min-width:26px;font-size:11px;}
     .topbar .user-chip b{display:inline-block;max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:1.05;}
     .topbar .user-chip small{font-size:10px;line-height:1.05;}
-    .nav{overflow:auto!important;scrollbar-width:thin;}
+    .nav{overflow:hidden!important;scrollbar-width:none!important;}
     .nav button:focus,.nav button:focus-visible,.nav button:active{outline:none!important;background:#eef6ff!important;color:var(--red)!important;}
     .nav button.active,.nav button.active:hover,.nav button.active:focus,.nav button.active:focus-visible,.nav button.active:active{background:linear-gradient(135deg,var(--red),var(--red-dark))!important;color:#fff!important;box-shadow:0 14px 28px rgba(15,76,129,.24)!important;}
     .motto-title p{font-family:Inter,"Segoe UI",Roboto,Arial,sans-serif!important;font-size:13px!important;line-height:1.5!important;color:var(--red)!important;font-weight:700!important;}
@@ -466,10 +466,13 @@
 
 
 
-    .nav-section-title{margin:7px 8px 3px;color:#0f4c81;font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;line-height:1.15;}
-    .nav-section-title:first-child{margin-top:2px;}
-    .nav button.nav-sub{padding-left:16px;}
-    .nav button.nav-main{font-weight:800;}
+    .nav-section-title{margin:5px 7px 1px;color:#0f4c81;font-size:9.2px;font-weight:600;letter-spacing:.035em;text-transform:uppercase;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .nav-section-title:first-child{margin-top:0;}
+    .nav button.nav-sub{padding-left:10px;}
+    .nav button.nav-main{font-weight:650;min-height:24px;}
+    .nav::-webkit-scrollbar{display:none;}
+    .nav button span:first-child{min-width:0;gap:5px;white-space:nowrap;overflow:hidden;}
+    .nav button span.label{display:inline-block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
     /* --- Targeted update v8: premium blue/navy theme, smaller login card, SD logo --- */
     :root{--red:#0f4c81!important;--red-dark:#06264a!important;--red-soft:#eef6ff!important;--info:#0f4c81!important;}
@@ -478,7 +481,7 @@
     .login-hero{padding:36px!important;background:linear-gradient(145deg,rgba(15,76,129,.96),rgba(6,38,74,.98)),repeating-linear-gradient(45deg,rgba(255,255,255,.08) 0 8px,transparent 8px 18px)!important;}
     .login-hero h1{font-size:clamp(28px,3vw,42px)!important;margin:42px 0 16px!important;}.login-hero p{font-size:13px!important;line-height:1.55!important;}.hero-pill{font-size:11.5px!important;padding:7px 10px!important;}
     .logo-mark.logo-image{overflow:hidden!important;padding:0!important;background:#fff!important;border-color:rgba(15,76,129,.18)!important;}.logo-mark.logo-image img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;}
-    .side-brand .logo-mark.logo-image{width:54px!important;height:54px!important;}.login-hero .logo-mark.logo-image{width:76px!important;height:76px!important;border-radius:20px!important;}
+    .side-brand .logo-mark.logo-image{width:38px!important;height:38px!important;}.login-hero .logo-mark.logo-image{width:76px!important;height:76px!important;border-radius:20px!important;}
     .nav button.active{background:linear-gradient(135deg,#0f4c81,#06264a)!important;box-shadow:0 14px 28px rgba(15,76,129,.24)!important;}.btn{background:#0f4c81!important;box-shadow:0 9px 20px rgba(15,76,129,.22)!important;}.btn:hover{background:#06264a!important;box-shadow:0 12px 25px rgba(15,76,129,.26)!important;}.btn.secondary{background:#fff!important;color:#0f4c81!important;border-color:rgba(15,76,129,.30)!important;box-shadow:none!important;}.btn.ghost{background:#fff!important;color:var(--ink)!important;border-color:var(--line)!important;box-shadow:none!important;}.avatar{background:#0f4c81!important;}
     input[type="checkbox"]:checked{background:#0f4c81!important;border-color:#0f4c81!important;box-shadow:0 0 0 3px rgba(15,76,129,.10)!important;}input[type="checkbox"]:focus-visible{box-shadow:0 0 0 4px rgba(15,76,129,.14)!important;}.field input:focus,.field select:focus,.field textarea:focus{border-color:rgba(15,76,129,.75)!important;box-shadow:0 0 0 4px rgba(15,76,129,.10)!important;}
     @media (max-width:900px){.login-card{grid-template-columns:1fr!important;width:min(520px,94vw)!important}.login-hero{display:none!important}.login-form-wrap{padding:30px!important}}
