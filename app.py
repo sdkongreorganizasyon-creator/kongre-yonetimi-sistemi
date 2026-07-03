@@ -3,7 +3,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="Kongre Yönetimi Sistemi",
+    page_title="Süreç Yönetimi Sistemi",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed",
