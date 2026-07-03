@@ -5,7 +5,7 @@ Bu paket, yüklenen çalışan yönetim sistemi şablonunun aynı tek parça HTM
 ## Giriş
 
 - Kullanıcı adı: `admin`
-- Şifre: `Turkak2026!`
+- Şifre: `Sdkongre2026!`
 
 ## Kurulum
 
