@@ -221,3 +221,4 @@ component_value = kongre_component(
     ai_response=st.session_state.get("ai_response"),
 )
 _handle_component_value(component_value)
+
