@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>EVENTIX</title>
   <script>
   (function () {
@@ -827,7 +827,281 @@
     min-width:680px!important;
   }
 }
+/* --- Mobil tarayıcı uyumluluk düzeltmesi: Android Chrome + iOS Safari --- */
 
+.mobile-menu-button,
+.mobile-menu-overlay {
+  display: none;
+}
+
+.calendar-scroll {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+
+  html,
+  body,
+  #appPage.app,
+  .main {
+    height: var(--mobile-vh, 100dvh) !important;
+    min-height: var(--mobile-vh, 100dvh) !important;
+  }
+
+  .login-page {
+    min-height: var(--mobile-vh, 100dvh) !important;
+    padding-top: max(14px, env(safe-area-inset-top)) !important;
+    padding-right: max(14px, env(safe-area-inset-right)) !important;
+    padding-bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    padding-left: max(14px, env(safe-area-inset-left)) !important;
+  }
+
+  #appPage.app.hidden {
+    display: none !important;
+  }
+
+  #appPage.app {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .main {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 1200 !important;
+
+    width: min(86vw, 330px) !important;
+    max-width: 330px !important;
+
+    height: var(--mobile-vh, 100dvh) !important;
+    max-height: none !important;
+
+    padding-top: max(10px, env(safe-area-inset-top)) !important;
+    padding-right: 10px !important;
+    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    padding-left: max(10px, env(safe-area-inset-left)) !important;
+
+    border-right: 1px solid rgba(216, 230, 243, 0.95) !important;
+    border-bottom: 0 !important;
+
+    box-shadow: 12px 0 32px rgba(15, 23, 42, 0.18) !important;
+
+    transform: translateX(-105%) !important;
+    transition: transform 0.22s ease !important;
+
+    overflow: hidden !important;
+  }
+
+  #appPage.mobile-menu-open .sidebar {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar .nav {
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+  }
+
+  .sidebar .nav button {
+    min-height: 42px !important;
+    padding: 10px 11px !important;
+
+    font-size: 12px !important;
+
+    touch-action: manipulation !important;
+  }
+
+  .mobile-menu-overlay {
+    display: block !important;
+
+    position: fixed !important;
+    inset: 0 !important;
+
+    z-index: 1190 !important;
+
+    width: 100% !important;
+    height: 100% !important;
+
+    padding: 0 !important;
+
+    background: rgba(15, 23, 42, 0.42) !important;
+
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+
+    transition:
+      opacity 0.22s ease,
+      visibility 0.22s ease !important;
+  }
+
+  #appPage.mobile-menu-open .mobile-menu-overlay {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
+  .topbar {
+    height: auto !important;
+    min-height: 58px !important;
+
+    padding-top: max(8px, env(safe-area-inset-top)) !important;
+    padding-right: max(10px, env(safe-area-inset-right)) !important;
+    padding-bottom: 8px !important;
+    padding-left: max(10px, env(safe-area-inset-left)) !important;
+
+    align-items: center !important;
+  }
+
+  .mobile-title-row {
+    width: 100% !important;
+
+    display: flex !important;
+    align-items: center !important;
+
+    gap: 9px !important;
+    min-width: 0 !important;
+  }
+
+  .mobile-title-row > div {
+    min-width: 0 !important;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 5px !important;
+
+    min-width: 72px !important;
+    min-height: 42px !important;
+
+    padding: 8px 10px !important;
+
+    border: 1px solid rgba(15, 76, 129, 0.25) !important;
+    border-radius: 12px !important;
+
+    background: #ffffff !important;
+    color: var(--red) !important;
+
+    font-weight: 850 !important;
+    font-size: 12px !important;
+
+    box-shadow: none !important;
+
+    touch-action: manipulation !important;
+    flex: 0 0 auto !important;
+  }
+
+  .topbar > .btn-row {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  .topbar .btn.small,
+  .topbar .user-chip {
+    min-height: 42px !important;
+    height: 42px !important;
+
+    touch-action: manipulation !important;
+  }
+
+  #view.view {
+    height: auto !important;
+
+    padding-right: max(10px, env(safe-area-inset-right)) !important;
+    padding-bottom: max(20px, env(safe-area-inset-bottom)) !important;
+    padding-left: max(10px, env(safe-area-inset-left)) !important;
+
+    overscroll-behavior: contain !important;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    font-size: 16px !important;
+  }
+
+  .calendar-scroll {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-x: contain !important;
+
+    padding-bottom: 4px !important;
+  }
+
+  .weekdays,
+  .calendar {
+    width: 680px !important;
+    min-width: 680px !important;
+  }
+
+  .table-wrap {
+    overscroll-behavior-x: contain !important;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end !important;
+
+    padding-top: max(10px, env(safe-area-inset-top)) !important;
+    padding-right: max(10px, env(safe-area-inset-right)) !important;
+    padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    padding-left: max(10px, env(safe-area-inset-left)) !important;
+  }
+
+  .modal {
+    width: 100% !important;
+
+    max-height: calc(
+      var(--mobile-vh, 100dvh)
+      - max(20px, env(safe-area-inset-top))
+      - max(20px, env(safe-area-inset-bottom))
+    ) !important;
+  }
+
+  .modal .body {
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .modal footer {
+    padding-bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    flex-wrap: wrap !important;
+  }
+}
+
+@media (max-width: 420px) {
+
+  .mobile-menu-button span {
+    display: none !important;
+  }
+
+  .mobile-menu-button {
+    min-width: 44px !important;
+    width: 44px !important;
+    padding: 8px !important;
+  }
+
+  .topbar > .btn-row {
+    margin-left: 0 !important;
+  }
+}
   </style>
 </head>
 <body>
@@ -856,14 +1130,39 @@
   </section>
 
   <section id="appPage" class="app hidden">
-    <aside class="sidebar">
+    <aside id="mobileSidebar" class="sidebar">
       <div class="side-brand"><div class="logo-mark logo-image"><img src="logo.jpg" alt="SD Kongre Organizasyon Hizmetleri"></div><div><strong>EVENTIX</strong><span>SÜREÇ YÖNETİMİ SİSTEMİ</span></div></div>
       <nav id="nav" class="nav"></nav>
-      <div class="side-footer"><strong id="sideUserName">-</strong><span id="sideUserRole">-</span></div>
+       <div class="side-footer"><strong id="sideUserName">-</strong><span id="sideUserRole">-</span></div>
     </aside>
+
+    <button
+      id="mobileMenuOverlay"
+      class="mobile-menu-overlay"
+      type="button"
+      aria-label="Menüyü kapat"
+      onclick="App.closeMobileMenu()">
+    </button>
+
     <main class="main">
       <header class="topbar">
-        <div><h1 id="topTitle">Ana Dashboard</h1><div id="topSub" class="sub">Operasyonel görünüm</div></div>
+        <div class="mobile-title-row">
+          <button
+            id="mobileMenuButton"
+            class="mobile-menu-button"
+            type="button"
+            aria-label="Menüyü aç"
+            aria-controls="mobileSidebar"
+            aria-expanded="false"
+            onclick="App.toggleMobileMenu()">
+            ☰ <span>Menü</span>
+          </button>
+
+          <div>
+            <h1 id="topTitle">Ana Dashboard</h1>
+            <div id="topSub" class="sub">Operasyonel görünüm</div>
+          </div>
+        </div>
         <div class="btn-row"><button class="btn secondary small" onclick="App.showProfile()">Profil / Şifre</button><div class="user-chip"><span id="topAvatar" class="avatar">K</span><div><b id="topUserName">-</b><br><small id="topUserRole" class="muted">-</small></div></div><button class="btn ghost small" onclick="App.logout()">Çıkış</button></div>
       </header>
       <section id="view" class="view"></section>
@@ -1011,7 +1310,7 @@ function navTitleStyle(title){
     function moduleActions(html){return `<div class="page-actions">${html}</div>`}
     function moduleButtons(key){return `<button class="btn secondary small" onclick="App.downloadTemplate('${key}')">Boş Excel Şablonu</button><button class="btn secondary small" onclick="App.importExcel('${key}')">İçe Aktar</button><button class="btn ghost small" onclick="App.exportExcel('${key}')">Dışa Aktar</button>${key==="postEvents"?`<button class="btn ghost small" onclick="App.exportPdf('${key}')">PDF</button>`:""}<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`}
     function showCalendar(){ state.viewKey="calendar"; setTitle("Takvim","Aylık organizasyon, kurulum, prova ve söküm görünümü"); $("view").innerHTML=`<div class="panel">${calendarHtml()}</div>${moduleActions(`<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`)}`; }
-    function calendarHtml(){ const monthDate=new Date(state.calendarMonth.getFullYear(),state.calendarMonth.getMonth(),1); const monthTitle=monthDate.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}); const year=monthDate.getFullYear(), month=monthDate.getMonth(); const first=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const prev=new Date(year,month,0).getDate(); const cells=[]; for(let i=0;i<42;i++){let day,cm=month,cls="day"; if(i<first){day=prev-first+i+1;cm=month-1;cls+=" other"}else if(i>=first+days){day=i-first-days+1;cm=month+1;cls+=" other"}else{day=i-first+1} const iso=toISO(new Date(year,cm,day)); if(iso===today())cls+=" today"; const items=calendarItems(iso); cells.push(`<div class="${cls}"><div class="day-num"><span>${day}</span>${iso===today()?'<span>Bugün</span>':''}</div>${items.map(x=>`<button class="cal-chip" onclick="App.openCalendarItem('${x.key}','${x.id}')">${esc(x.title)}</button>`).join("")}</div>`); } return `<div class="calendar-head"><h3>Kongre Yönetimi Takvimi - ${esc(monthTitle)}</h3><div class="btn-row"><button class="btn ghost small" onclick="App.moveMonth(-1)">‹ Önceki</button><button class="btn secondary small" onclick="App.thisMonth()">Bugün</button><button class="btn ghost small" onclick="App.moveMonth(1)">Sonraki ›</button></div></div><div class="weekdays">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(d=>`<div class="weekday">${d}</div>`).join("")}</div><div class="calendar">${cells.join("")}</div>`; }
+    function calendarHtml(){ const monthDate=new Date(state.calendarMonth.getFullYear(),state.calendarMonth.getMonth(),1); const monthTitle=monthDate.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}); const year=monthDate.getFullYear(), month=monthDate.getMonth(); const first=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const prev=new Date(year,month,0).getDate(); const cells=[]; for(let i=0;i<42;i++){let day,cm=month,cls="day"; if(i<first){day=prev-first+i+1;cm=month-1;cls+=" other"}else if(i>=first+days){day=i-first-days+1;cm=month+1;cls+=" other"}else{day=i-first+1} const iso=toISO(new Date(year,cm,day)); if(iso===today())cls+=" today"; const items=calendarItems(iso); cells.push(`<div class="${cls}"><div class="day-num"><span>${day}</span>${iso===today()?'<span>Bugün</span>':''}</div>${items.map(x=>`<button class="cal-chip" onclick="App.openCalendarItem('${x.key}','${x.id}')">${esc(x.title)}</button>`).join("")}</div>`); } return `<div class="calendar-head"><h3>Kongre Yönetimi Takvimi - ${esc(monthTitle)}</h3><div class="btn-row"><button class="btn ghost small" onclick="App.moveMonth(-1)">‹ Önceki</button><button class="btn secondary small" onclick="App.thisMonth()">Bugün</button><button class="btn ghost small" onclick="App.moveMonth(1)">Sonraki ›</button></div></div><div class="calendar-scroll"><div class="weekdays">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(d=>`<div class="weekday">${d}</div>`).join("")}</div><div class="calendar">${cells.join("")}</div></div>`; }
     function calendarItems(iso){ const out=[]; getList("organizations").forEach(o=>{ [[o.setupDate,"Kurulum"],[o.rehearsalDate,"Prova"],[o.startDate,"Başlangıç"],[o.endDate,"Bitiş"],[o.teardownDate,"Söküm"]].forEach(([d,t])=>{if(d===iso)out.push({key:"organizations",id:o.id,title:`${t}: ${o.eventName}`})}); }); getList("travel").forEach(t=>{ if(t.checkIn===iso)out.push({key:"travel",id:t.id,title:`Check-in: ${t.person}`}); if(t.checkOut===iso)out.push({key:"travel",id:t.id,title:`Check-out: ${t.person}`}); }); return out; }
     function moveMonth(n){state.calendarMonth.setMonth(state.calendarMonth.getMonth()+n); showCalendar();} function thisMonth(){state.calendarMonth=new Date(); showCalendar();} function openCalendarItem(key,id){openDetail(key,id)}
     function showPerformance(){
@@ -1181,8 +1480,157 @@ function navTitleStyle(title){
     function showForgotPassword(){ openModal("Şifremi Unuttum", `<p>Bu sürümde şifre sıfırlama sistem yöneticisi tarafından yapılır.</p><p class="muted">İlk kullanıcı için kullanıcı adı <b>admin</b>, şifre <b>Turkak2026!</b>.</p>`, `<button class="btn ghost" onclick="App.closeModal()">Kapat</button>`); }
     function openModal(title,body,footer=""){ $("modalTitle").textContent=title; $("modalBody").innerHTML=body; $("modalFooter").innerHTML=footer||`<button class="btn ghost" onclick="App.closeModal()">Kapat</button>`; $("modalBackdrop").classList.remove("hidden"); }
     function closeModal(){ $("modalBackdrop").classList.add("hidden"); } function backdropClose(e){ if(e.target.id==="modalBackdrop") closeModal(); }
-    async function init(){ const S=window.Streamlit||window.streamlitComponentLib?.Streamlit; if(S){S.setComponentReady(); const fit=()=>S.setFrameHeight(window.innerHeight||720); fit(); window.addEventListener('resize',fit); if(S.events) S.events.addEventListener(S.RENDER_EVENT, e=>handleStreamlitArgs(e.detail?.args||{}));} await seed(); if(Array.isArray(store.get(KEYS.settings,{}))) saveSettings({aiPrompts:{}}); $("loginForm").addEventListener("submit", login); const session=store.get(KEYS.session,null); if(session?.userId){ const u=getUsers().find(x=>x.id===session.userId && x.active); if(u){state.currentUser=u; showApp(); if(!restorePendingAiView()) showDashboard(); handleStreamlitArgs(window.__latestStreamlitArgs||{}); return;} } logout(); }
-    return {init,login,logout,showDashboard,showCommandCenter,showModule,showModuleForm,saveRecord,deleteRecord,renderModuleRows,openDetail,showCalendar,moveMonth,thisMonth,openCalendarItem,showPerformance,showProfitability,showSimulation,runSimulation,showAiAssistant,generateAiDraft,showSearch,renderSearch,showNotifications,showProfile,saveProfile,showAdmin,saveAdminUser,toggleAdminUser,deleteAdminUser,saveAdminPrompts,exportCsv,downloadTemplate,importExcel,exportExcel,exportPdf,printCurrentView,showForgotPassword,closeModal,backdropClose,toggleEquipmentQty,addOfferItem,removeOfferItem,recalcOfferItems,toggleOtherOrganization,addBudgetItem,removeBudgetItem,recalcBudgetItems,toggleSimCustom};
+     function mobileViewportHeight() {
+      return Math.round(
+        window.visualViewport?.height ||
+        window.innerHeight ||
+        720
+      );
+    }
+
+    function fitStreamlitFrame() {
+      const S =
+        window.Streamlit ||
+        window.streamlitComponentLib?.Streamlit;
+
+      if (S) {
+        S.setFrameHeight(mobileViewportHeight());
+      }
+
+      document.documentElement.style.setProperty(
+        "--mobile-vh",
+        `${mobileViewportHeight()}px`
+      );
+    }
+
+    function toggleMobileMenu() {
+      const app = $("appPage");
+
+      if (!app) {
+        return;
+      }
+
+      const willOpen =
+        !app.classList.contains("mobile-menu-open");
+
+      app.classList.toggle(
+        "mobile-menu-open",
+        willOpen
+      );
+
+      $("mobileMenuButton")?.setAttribute(
+        "aria-expanded",
+        String(willOpen)
+      );
+    }
+
+    function closeMobileMenu() {
+      $("appPage")?.classList.remove(
+        "mobile-menu-open"
+      );
+
+      $("mobileMenuButton")?.setAttribute(
+        "aria-expanded",
+        "false"
+      );
+    }
+
+    async function init() {
+      const S =
+        window.Streamlit ||
+        window.streamlitComponentLib?.Streamlit;
+
+      if (S) {
+        S.setComponentReady();
+
+        fitStreamlitFrame();
+
+        window.addEventListener(
+          "resize",
+          fitStreamlitFrame,
+          { passive: true }
+        );
+
+        window.addEventListener(
+          "orientationchange",
+          () => setTimeout(fitStreamlitFrame, 150),
+          { passive: true }
+        );
+
+        window.visualViewport?.addEventListener(
+          "resize",
+          fitStreamlitFrame,
+          { passive: true }
+        );
+
+        if (S.events) {
+          S.events.addEventListener(
+            S.RENDER_EVENT,
+            event => {
+              handleStreamlitArgs(
+                event.detail?.args || {}
+              );
+            }
+          );
+        }
+      }
+
+      $("nav")?.addEventListener(
+        "click",
+        event => {
+          if (event.target.closest("button")) {
+            closeMobileMenu();
+          }
+        }
+      );
+
+      await seed();
+
+      if (
+        Array.isArray(
+          store.get(KEYS.settings, {})
+        )
+      ) {
+        saveSettings({
+          aiPrompts: {}
+        });
+      }
+
+      $("loginForm").addEventListener(
+        "submit",
+        login
+      );
+
+      const session =
+        store.get(KEYS.session, null);
+
+      if (session?.userId) {
+        const user = getUsers().find(
+          item =>
+            item.id === session.userId &&
+            item.active
+        );
+
+        if (user) {
+          state.currentUser = user;
+
+          showApp();
+
+          if (!restorePendingAiView()) {
+            showDashboard();
+          }
+
+          handleStreamlitArgs(
+            window.__latestStreamlitArgs || {}
+          );
+
+          return;
+        }
+      }
+
+      logout();
+    }
+    return {init,login,logout,toggleMobileMenu,closeMobileMenu,showDashboard,showCommandCenter,showModule,showModuleForm,saveRecord,deleteRecord,renderModuleRows,openDetail,showCalendar,moveMonth,thisMonth,openCalendarItem,showPerformance,showProfitability,showSimulation,runSimulation,showAiAssistant,generateAiDraft,showSearch,renderSearch,showNotifications,showProfile,saveProfile,showAdmin,saveAdminUser,toggleAdminUser,deleteAdminUser,saveAdminPrompts,exportCsv,downloadTemplate,importExcel,exportExcel,exportPdf,printCurrentView,showForgotPassword,closeModal,backdropClose,toggleEquipmentQty,addOfferItem,removeOfferItem,recalcOfferItems,toggleOtherOrganization,addBudgetItem,removeBudgetItem,recalcBudgetItems,toggleSimCustom};
   })();
   document.addEventListener("DOMContentLoaded", App.init);
   </script>
