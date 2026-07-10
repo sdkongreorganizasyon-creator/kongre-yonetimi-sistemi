@@ -776,10 +776,33 @@
     gap:8px!important;
   }
 
-  .weekdays,
-  .calendar{
-    min-width:680px!important;
-  }
+  .dashboard-grid,
+.dashboard-grid > div,
+.dashboard-grid .panel{
+  min-width:0!important;
+  max-width:100%!important;
+}
+
+.calendar-scroll{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-x pan-y!important;
+  padding-bottom:8px!important;
+}
+
+.calendar-scroll .weekdays,
+.calendar-scroll .calendar{
+  display:grid!important;
+  grid-template-columns:repeat(7,96px)!important;
+  width:672px!important;
+  min-width:672px!important;
+  max-width:none!important;
+}
 
   .modal-backdrop{
     padding:10px!important;
@@ -1310,7 +1333,7 @@ function navTitleStyle(title){
     function moduleActions(html){return `<div class="page-actions">${html}</div>`}
     function moduleButtons(key){return `<button class="btn secondary small" onclick="App.downloadTemplate('${key}')">Boş Excel Şablonu</button><button class="btn secondary small" onclick="App.importExcel('${key}')">İçe Aktar</button><button class="btn ghost small" onclick="App.exportExcel('${key}')">Dışa Aktar</button>${key==="postEvents"?`<button class="btn ghost small" onclick="App.exportPdf('${key}')">PDF</button>`:""}<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`}
     function showCalendar(){ state.viewKey="calendar"; setTitle("Takvim","Aylık organizasyon, kurulum, prova ve söküm görünümü"); $("view").innerHTML=`<div class="panel">${calendarHtml()}</div>${moduleActions(`<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`)}`; }
-    function calendarHtml(){ const monthDate=new Date(state.calendarMonth.getFullYear(),state.calendarMonth.getMonth(),1); const monthTitle=monthDate.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}); const year=monthDate.getFullYear(), month=monthDate.getMonth(); const first=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const prev=new Date(year,month,0).getDate(); const cells=[]; for(let i=0;i<42;i++){let day,cm=month,cls="day"; if(i<first){day=prev-first+i+1;cm=month-1;cls+=" other"}else if(i>=first+days){day=i-first-days+1;cm=month+1;cls+=" other"}else{day=i-first+1} const iso=toISO(new Date(year,cm,day)); if(iso===today())cls+=" today"; const items=calendarItems(iso); cells.push(`<div class="${cls}"><div class="day-num"><span>${day}</span>${iso===today()?'<span>Bugün</span>':''}</div>${items.map(x=>`<button class="cal-chip" onclick="App.openCalendarItem('${x.key}','${x.id}')">${esc(x.title)}</button>`).join("")}</div>`); } return `<div class="calendar-head"><h3>Kongre Yönetimi Takvimi - ${esc(monthTitle)}</h3><div class="btn-row"><button class="btn ghost small" onclick="App.moveMonth(-1)">‹ Önceki</button><button class="btn secondary small" onclick="App.thisMonth()">Bugün</button><button class="btn ghost small" onclick="App.moveMonth(1)">Sonraki ›</button></div></div><div class="calendar-scroll"><div class="weekdays">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(d=>`<div class="weekday">${d}</div>`).join("")}</div><div class="calendar">${cells.join("")}</div></div>`; }
+    function calendarHtml(){ const monthDate=new Date(state.calendarMonth.getFullYear(),state.calendarMonth.getMonth(),1); const monthTitle=monthDate.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}); const year=monthDate.getFullYear(), month=monthDate.getMonth(); const first=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const prev=new Date(year,month,0).getDate(); const cells=[]; for(let i=0;i<42;i++){let day,cm=month,cls="day"; if(i<first){day=prev-first+i+1;cm=month-1;cls+=" other"}else if(i>=first+days){day=i-first-days+1;cm=month+1;cls+=" other"}else{day=i-first+1} const iso=toISO(new Date(year,cm,day)); if(iso===today())cls+=" today"; const items=calendarItems(iso); cells.push(`<div class="${cls}"><div class="day-num"><span>${day}</span>${iso===today()?'<span>Bugün</span>':''}</div>${items.map(x=>`<button class="cal-chip" onclick="App.openCalendarItem('${x.key}','${x.id}')">${esc(x.title)}</button>`).join("")}</div>`); } return `<div class="calendar-head"><h3>Kongre Yönetimi Takvimi - ${esc(monthTitle)}</h3><div class="btn-row"><button class="btn ghost small" onclick="App.moveMonth(-1)">‹ Önceki</button><button class="btn secondary small" onclick="App.thisMonth()">Bugün</button><button class="btn ghost small" onclick="App.moveMonth(1)">Sonraki ›</button></div></div><div class="calendar-scroll"><div class="calendar-scroll"><div class="weekdays">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(d=>`<div class="weekday">${d}</div>`).join("")}</div><div class="calendar">${cells.join("")}</div></div>`; }
     function calendarItems(iso){ const out=[]; getList("organizations").forEach(o=>{ [[o.setupDate,"Kurulum"],[o.rehearsalDate,"Prova"],[o.startDate,"Başlangıç"],[o.endDate,"Bitiş"],[o.teardownDate,"Söküm"]].forEach(([d,t])=>{if(d===iso)out.push({key:"organizations",id:o.id,title:`${t}: ${o.eventName}`})}); }); getList("travel").forEach(t=>{ if(t.checkIn===iso)out.push({key:"travel",id:t.id,title:`Check-in: ${t.person}`}); if(t.checkOut===iso)out.push({key:"travel",id:t.id,title:`Check-out: ${t.person}`}); }); return out; }
     function moveMonth(n){state.calendarMonth.setMonth(state.calendarMonth.getMonth()+n); showCalendar();} function thisMonth(){state.calendarMonth=new Date(); showCalendar();} function openCalendarItem(key,id){openDetail(key,id)}
     function showPerformance(){
