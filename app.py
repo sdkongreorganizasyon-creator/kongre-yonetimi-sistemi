@@ -114,14 +114,48 @@ Aşağıdaki senaryoyu Türkçe, kurumsal ve uygulanabilir şekilde analiz et.
 Admin promptu:
 {admin_prompt or "Admin promptu girilmemiş."}
 
-Bağlı etkinlik: {payload.get("organization") or "Manuel / Genel"}
-Senaryo: {payload.get("scenario") or "Senaryo girilmedi"}
-Planlanan gelir: {payload.get("plannedRevenue", 0)}
-Planlanan gider: {payload.get("plannedExpense", 0)}
-Değişim / oran / fark: {payload.get("change", 0)}
-Mevcut katılımcı: {payload.get("currentParticipants", 0)}
-Yeni katılımcı: {payload.get("newParticipants", 0)}
-Ek not: {payload.get("notes") or "Ek not yok."}
+GENEL
+Etkinlik adı: {payload.get("eventName") or "Belirtilmedi"}
+Etkinlik türü: {payload.get("eventType") or "Belirtilmedi"}
+Başlangıç tarihi: {payload.get("startDate") or "Belirtilmedi"}
+Bitiş tarihi: {payload.get("endDate") or "Belirtilmedi"}
+Mekân adı: {payload.get("venueName") or "Belirtilmedi"}
+Şehir/İlçe: {payload.get("location") or "Belirtilmedi"}
+Beklenen davetli sayısı: {payload.get("expectedGuests", 0)}
+VIP katılımcı sayısı: {payload.get("vipGuests", 0)}
+Görevli personel sayısı: {payload.get("staffCount", 0)}
+
+SAHNE VE TEKNİK
+Sahne kurulumu: {payload.get("stageSetup") or "Yok"}
+Ses sistemi: {payload.get("soundSystem") or "Yok"}
+Işık sistemi: {payload.get("lightingSystem") or "Yok"}
+LED ekran: {payload.get("ledScreen") or "Yok"}
+
+ORGANİZASYON
+Hostes: {payload.get("hostess") or "Yok"}
+Karşılama ekibi: {payload.get("welcomeTeam") or "Yok"}
+Fotoğrafçı: {payload.get("photographer") or "Yok"}
+Kameraman: {payload.get("cameraman") or "Yok"}
+
+CATERING
+Kokteyl: {payload.get("cocktail") or "Yok"}
+Açık büfe: {payload.get("openBuffet") or "Yok"}
+Set menü: {payload.get("setMenu") or "Yok"}
+İçecek servisi: {payload.get("beverageService") or "Yok"}
+
+ULAŞIM VE KONAKLAMA
+Araç tipi: {payload.get("vehicleType") or "Belirtilmedi"}
+Araç sayısı: {payload.get("vehicleCount", 0)}
+Tahmini yakıt gideri: {payload.get("fuelCost", 0)}
+Konaklama ihtiyacı: {payload.get("accommodation") or "Yok"}
+
+FİNANSAL
+Tahmini gelir: {payload.get("estimatedRevenue", 0)}
+Tahmini gider: {payload.get("estimatedExpense", 0)}
+Beklenmeyen gider oranı (%): {payload.get("unexpectedExpenseRate", 0)}
+
+SENARYO
+{payload.get("scenario") or "Senaryo girilmedi"}
 
 Yanıt formatı:
 - Kısa yönetici özeti
