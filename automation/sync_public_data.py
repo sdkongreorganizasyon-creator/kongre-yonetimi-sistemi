@@ -53,6 +53,7 @@ ALTINKAYNAK_CURRENCY_URL = "https://rest.altinkaynak.com/Currency.json"
 ALTINKAYNAK_GOLD_URL = "https://rest.altinkaynak.com/Gold.json"
 ALTINKAYNAK_CURRENCY_PAGE = "https://www.altinkaynak.com/Doviz/Kur/Guncel"
 ALTINKAYNAK_GOLD_PAGE = "https://www.altinkaynak.com/Altin/Kur/Guncel"
+ALTINKAYNAK_LIVE_PAGE = "https://www.altinkaynak.com/canli-kurlar/"
 
 BIST_URLS = {
     "XU030": "https://www.borsaistanbul.com/endeks/xu030",
@@ -383,9 +384,279 @@ def parse_altinkaynak_html(page_html: str, wanted_codes: Iterable[str]) -> dict[
     return result
 
 
-def fetch_altinkaynak() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+def iter_nested_records(value: Any) -> Iterable[dict[str, Any]]:
+    """Yield dictionaries from nested JSON payloads without assuming one fixed schema."""
+
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from iter_nested_records(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from iter_nested_records(child)
+
+
+def first_record_value(record: dict[str, Any], keys: Iterable[str]) -> Any:
+    lowered = {normalized_text(key): value for key, value in record.items()}
+    for key in keys:
+        candidate = lowered.get(normalized_text(key))
+        if candidate not in (None, ""):
+            return candidate
+    return None
+
+
+def parse_altinkaynak_payload(payload: Any, wanted_codes: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Parse Altinkaynak JSON/XHR responses captured by the rendered page."""
+
+    wanted = set(wanted_codes)
+    result: dict[str, dict[str, Any]] = {}
+    code_keys = ("Kod", "Code", "Symbol", "Sembol", "CurrencyCode")
+    name_keys = ("Aciklama", "Açıklama", "Description", "Name", "Ad", "Baslik", "Başlık")
+    buy_keys = ("Alis", "Alış", "Buy", "Buying", "BuyingPrice", "Bid")
+    sell_keys = ("Satis", "Satış", "Sell", "Selling", "SellingPrice", "Ask")
+    change_keys = ("Change", "Degisim", "Değişim", "ChangePercent", "Rate")
+    update_keys = ("GuncellenmeZamani", "GüncellenmeZamanı", "UpdatedAt", "Date", "Tarih")
+
+    for record in iter_nested_records(payload):
+        provider_code = compact_text(first_record_value(record, code_keys)).upper()
+        code = ALTINKAYNAK_CODE_MAP.get(provider_code)
+
+        if code not in wanted:
+            name = compact_text(first_record_value(record, name_keys))
+            if name:
+                for candidate in wanted:
+                    if alias_match(name, ALTINKAYNAK_ALIASES[candidate]):
+                        code = candidate
+                        break
+
+        if code not in wanted or code in result:
+            continue
+
+        canonical = {
+            "Alis": first_record_value(record, buy_keys),
+            "Satis": first_record_value(record, sell_keys),
+            "Change": first_record_value(record, change_keys),
+            "GuncellenmeZamani": first_record_value(record, update_keys),
+        }
+        item = build_altinkaynak_item(code, canonical)
+        if item is not None:
+            result[code] = item
+
+    return result
+
+
+def parse_altinkaynak_text_rows(rows: Iterable[str], wanted_codes: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Parse visible rendered row/card text when Altinkaynak data is injected by JavaScript."""
+
+    wanted = set(wanted_codes)
+    result: dict[str, dict[str, Any]] = {}
+    for raw_row in rows:
+        row = compact_text(raw_row)
+        if not row:
+            continue
+        row_without_dates = DATE_TIME_RE.sub(" ", row)
+        row_without_dates = re.sub(r"\b\d{2}[./-]\d{2}[./-]\d{4}\b", " ", row_without_dates)
+        row_without_dates = re.sub(r"\b\d{2}:\d{2}(?::\d{2})?\b", " ", row_without_dates)
+
+        for code in wanted - result.keys():
+            if not alias_match(row_without_dates, ALTINKAYNAK_ALIASES[code]):
+                continue
+
+            prices = values_in_text(row_without_dates, VALUE_BOUNDS[code])
+            if not prices:
+                continue
+
+            # Rendered Altinkaynak rows normally contain buying and selling values.
+            # If only one valid value is visible, preserve it as the displayed price
+            # rather than inventing a second value.
+            buying = prices[0]
+            selling = prices[0]
+            if len(prices) > 1:
+                plausible_pair: tuple[float, float] | None = None
+                for left, right in zip(prices, prices[1:]):
+                    ratio = right / left if left else 0
+                    if 0.75 <= ratio <= 1.35:
+                        plausible_pair = (left, right)
+                        break
+                if plausible_pair is not None:
+                    buying, selling = plausible_pair
+                else:
+                    buying, selling = prices[0], prices[1]
+            change: float | None = None
+            percent_match = re.search(r"%\s*([-+]?\d+(?:[.,]\d+)?)", row_without_dates)
+            if percent_match is None:
+                percent_match = re.search(
+                    r"(?<![\d.,])([-+]?\d+(?:[.,]\d+)?)\s*%(?!\s*\d)",
+                    row_without_dates,
+                )
+            if percent_match:
+                change = normalize_number(percent_match.group(1))
+
+            item = build_altinkaynak_item(
+                code,
+                {"Alis": buying, "Satis": selling, "Change": change},
+            )
+            if item is not None:
+                if len(prices) == 1:
+                    item.pop("buying", None)
+                    item["note"] = f"Güncel değer {selling:.2f}"
+                result[code] = item
+
+    return result
+
+
+def fetch_altinkaynak_rendered(codes: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Render Altinkaynak pages and read XHR/DOM data as a fallback for 52x API errors."""
+
+    wanted = list(dict.fromkeys(codes))
+    if not wanted:
+        return {}, {}
+    if sync_playwright is None:
+        return {}, {LABELS[code]: "playwright paketi yüklü değil." for code in wanted}
+
     result: dict[str, dict[str, Any]] = {}
     errors: dict[str, str] = {}
+    executable = browser_executable()
+    captured_payloads: list[Any] = []
+
+    def capture_json(response: Any) -> None:
+        try:
+            content_type = str(response.headers.get("content-type") or "").lower()
+            if "json" not in content_type:
+                return
+            if "altinkaynak" not in str(response.url).lower():
+                return
+            captured_payloads.append(response.json())
+        except Exception:
+            return
+
+    page_specs = (
+        (ALTINKAYNAK_LIVE_PAGE, tuple(wanted)),
+        (ALTINKAYNAK_CURRENCY_PAGE, tuple(code for code in wanted if code in {"USDTRY", "EURTRY", "GBPTRY"})),
+        (ALTINKAYNAK_GOLD_PAGE, tuple(code for code in wanted if code in {"GRAM_GOLD", "QUARTER_GOLD"})),
+    )
+
+    try:
+        with sync_playwright() as playwright:
+            launch_options: dict[str, Any] = {
+                "headless": True,
+                "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+            }
+            if executable:
+                launch_options["executable_path"] = executable
+            browser = playwright.chromium.launch(**launch_options)
+            context = browser.new_context(
+                locale="tr-TR",
+                timezone_id="Europe/Istanbul",
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                ),
+            )
+            try:
+                for page_url, page_codes in page_specs:
+                    unresolved = [code for code in page_codes if code not in result]
+                    if not unresolved:
+                        continue
+                    page = context.new_page()
+                    page.on("response", capture_json)
+                    try:
+                        page.goto(page_url, wait_until="domcontentloaded", timeout=90_000)
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=25_000)
+                        except PlaywrightTimeoutError:
+                            pass
+                        page.wait_for_timeout(6_000)
+
+                        # 1) Read JSON/XHR responses used by the page itself.
+                        for payload in captured_payloads:
+                            missing_now = [code for code in unresolved if code not in result]
+                            if not missing_now:
+                                break
+                            result.update(parse_altinkaynak_payload(payload, missing_now))
+
+                        # 2) Parse the fully rendered DOM, including JavaScript-injected rows.
+                        missing_now = [code for code in unresolved if code not in result]
+                        if missing_now:
+                            rendered_html = page.content()
+                            result.update(parse_altinkaynak_html(rendered_html, missing_now))
+
+                        # 3) Parse visible table/card/body text as a final source-faithful fallback.
+                        missing_now = [code for code in unresolved if code not in result]
+                        if missing_now:
+                            text_blocks: list[str] = []
+                            for selector in (
+                                "tr",
+                                "[role=row]",
+                                "li",
+                                "[class*=card]",
+                                "[class*=kur]",
+                                "[class*=gold]",
+                                "[class*=currency]",
+                            ):
+                                try:
+                                    text_blocks.extend(page.locator(selector).all_inner_texts())
+                                except Exception:
+                                    continue
+
+                            # Collect small ancestor blocks around the exact labels. This
+                            # handles card-based layouts where labels and prices are split
+                            # across sibling elements rather than a table row.
+                            for code in missing_now:
+                                for alias in ALTINKAYNAK_ALIASES[code]:
+                                    try:
+                                        matches = page.get_by_text(alias, exact=False)
+                                        for index in range(min(matches.count(), 5)):
+                                            node = matches.nth(index)
+                                            for _level in range(5):
+                                                try:
+                                                    block = compact_text(node.inner_text(timeout=5_000))
+                                                except Exception:
+                                                    block = ""
+                                                if block and len(block) <= 2_000:
+                                                    text_blocks.append(block)
+                                                node = node.locator("xpath=..")
+                                    except Exception:
+                                        continue
+
+                            # Preserve line boundaries from the rendered body and create
+                            # short windows around labels; never parse the whole page as one
+                            # giant row, which could associate an unrelated price.
+                            try:
+                                body_text = page.locator("body").inner_text(timeout=30_000)
+                                body_lines = [compact_text(line) for line in body_text.splitlines() if compact_text(line)]
+                                text_blocks.extend(body_lines)
+                                for index, line in enumerate(body_lines):
+                                    if any(
+                                        alias_match(line, ALTINKAYNAK_ALIASES[code])
+                                        for code in missing_now
+                                    ):
+                                        text_blocks.append(" | ".join(body_lines[index : index + 8]))
+                            except Exception:
+                                pass
+
+                            result.update(parse_altinkaynak_text_rows(text_blocks, missing_now))
+                    except Exception as exc:
+                        for code in unresolved:
+                            errors.setdefault(LABELS[code], str(exc))
+                    finally:
+                        page.close()
+            finally:
+                context.close()
+                browser.close()
+    except Exception as exc:
+        for code in wanted:
+            errors.setdefault(LABELS[code], f"Altınkaynak tarayıcısı başlatılamadı: {exc}")
+
+    for code in wanted:
+        if code not in result:
+            errors.setdefault(LABELS[code], "Render edilmiş Altınkaynak sayfasında veri bulunamadı.")
+    return result, errors
+
+
+def fetch_altinkaynak() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    result: dict[str, dict[str, Any]] = {}
+    attempt_errors: dict[str, list[str]] = {}
 
     source_specs = (
         (
@@ -402,6 +673,7 @@ def fetch_altinkaynak() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
         ),
     )
 
+    # Fast path: official JSON services, then static public-page HTML.
     for source_name, json_url, page_url, codes in source_specs:
         source_errors: list[str] = []
         try:
@@ -417,10 +689,28 @@ def fetch_altinkaynak() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
                 result.update(parse_altinkaynak_html(decode_html(raw, content_type), missing))
             except Exception as exc:
                 source_errors.append(f"HTML: {exc}")
+        attempt_errors[source_name] = source_errors
 
+    # Altinkaynak's REST host can return Cloudflare 522/523 to GitHub runners.
+    # In that case use the exact public page requested by the user, render it in
+    # the already-installed headless browser, and read the page's own XHR/DOM data.
+    missing_all = [code for code in ("USDTRY", "EURTRY", "GBPTRY", "GRAM_GOLD", "QUARTER_GOLD") if code not in result]
+    rendered_errors: dict[str, str] = {}
+    if missing_all:
+        rendered, rendered_errors = fetch_altinkaynak_rendered(missing_all)
+        result.update(rendered)
+
+    errors: dict[str, str] = {}
+    for source_name, _json_url, _page_url, codes in source_specs:
         missing = [code for code in codes if code not in result]
-        if missing:
-            errors[source_name] = f"Eksik: {', '.join(missing)}. " + " | ".join(source_errors)
+        if not missing:
+            continue
+        messages = list(attempt_errors.get(source_name, []))
+        for code in missing:
+            message = rendered_errors.get(LABELS[code])
+            if message:
+                messages.append(f"{LABELS[code]} render: {message}")
+        errors[source_name] = f"Eksik: {', '.join(missing)}. " + " | ".join(messages)
 
     return result, errors
 
