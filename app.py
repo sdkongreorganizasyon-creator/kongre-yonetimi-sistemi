@@ -148,11 +148,9 @@ def _json_safe(value):
 @st.cache_data(ttl=60, show_spinner=False)
 def _public_data_snapshot() -> dict:
     empty = {
-        "tenders": [],
         "economy": {},
         "meta": {
             "firebaseEnabled": False,
-            "ekapLastScanAt": None,
             "economyLastUpdated": None,
         },
     }
@@ -162,30 +160,15 @@ def _public_data_snapshot() -> dict:
         if client is None:
             return empty
 
-        tenders = []
-        for document in client.collection("ekap_tenders").limit(500).stream():
-            row = document.to_dict() or {}
-            row.setdefault("id", document.id)
-            tenders.append(_json_safe(row))
-        tenders.sort(
-            key=lambda row: str(row.get("publicationDate") or row.get("updatedAt") or ""),
-            reverse=True,
-        )
-
         economy_doc = client.collection("system_public").document("economy").get()
         economy = _json_safe(economy_doc.to_dict() or {}) if economy_doc.exists else {}
 
-        ekap_status_doc = client.collection("system_public").document("ekap_status").get()
-        ekap_status = _json_safe(ekap_status_doc.to_dict() or {}) if ekap_status_doc.exists else {}
-
         return {
-            "tenders": tenders,
             "economy": economy,
             "meta": {
                 "firebaseEnabled": True,
-                "ekapLastScanAt": ekap_status.get("lastScanAt"),
                 "economyLastUpdated": economy.get("lastUpdated"),
-                "ekapMessage": ekap_status.get("message", ""),
+                "economySource": economy.get("sourceLabel") or economy.get("source", ""),
             },
         }
     except Exception as exc:
@@ -208,7 +191,7 @@ def _handle_public_data_refresh(value: dict) -> None:
     st.session_state["public_data_response"] = {
         "requestId": request_id,
         "ok": True,
-        "message": "EKAP ve ekonomi verileri yenilendi." if value.get("manual") else "",
+        "message": "Ekonomi verileri yenilendi." if value.get("manual") else "",
     }
     st.rerun()
 
