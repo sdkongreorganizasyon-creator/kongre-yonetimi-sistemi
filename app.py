@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import date, datetime
+import json
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -7,6 +9,14 @@ try:
     from google import genai
 except Exception:  # The app should still open if the dependency is missing.
     genai = None
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except Exception:  # Existing localStorage modules must continue to work without Firebase.
+    firebase_admin = None
+    credentials = None
+    firestore = None
 
 
 st.set_page_config(
@@ -101,6 +111,106 @@ def _secret(name: str, default: str = "") -> str:
     except Exception:
         return default
 
+
+
+def _secret_bool(name: str, default: bool = False) -> bool:
+    raw = _secret(name, "true" if default else "false").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+@st.cache_resource
+def _firestore_client():
+    if not _secret_bool("FIREBASE_ENABLED", False):
+        return None
+    if firebase_admin is None or credentials is None or firestore is None:
+        return None
+
+    raw = _secret("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        return None
+
+    info = json.loads(raw)
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(credentials.Certificate(info))
+    return firestore.client()
+
+
+def _json_safe(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _public_data_snapshot() -> dict:
+    empty = {
+        "tenders": [],
+        "economy": {},
+        "meta": {
+            "firebaseEnabled": False,
+            "ekapLastScanAt": None,
+            "economyLastUpdated": None,
+        },
+    }
+
+    try:
+        client = _firestore_client()
+        if client is None:
+            return empty
+
+        tenders = []
+        for document in client.collection("ekap_tenders").limit(500).stream():
+            row = document.to_dict() or {}
+            row.setdefault("id", document.id)
+            tenders.append(_json_safe(row))
+        tenders.sort(
+            key=lambda row: str(row.get("publicationDate") or row.get("updatedAt") or ""),
+            reverse=True,
+        )
+
+        economy_doc = client.collection("system_public").document("economy").get()
+        economy = _json_safe(economy_doc.to_dict() or {}) if economy_doc.exists else {}
+
+        ekap_status_doc = client.collection("system_public").document("ekap_status").get()
+        ekap_status = _json_safe(ekap_status_doc.to_dict() or {}) if ekap_status_doc.exists else {}
+
+        return {
+            "tenders": tenders,
+            "economy": economy,
+            "meta": {
+                "firebaseEnabled": True,
+                "ekapLastScanAt": ekap_status.get("lastScanAt"),
+                "economyLastUpdated": economy.get("lastUpdated"),
+                "ekapMessage": ekap_status.get("message", ""),
+            },
+        }
+    except Exception as exc:
+        empty["meta"]["error"] = str(exc)
+        return empty
+
+
+def _handle_public_data_refresh(value: dict) -> None:
+    request_id = str(value.get("requestId") or "")
+    if not request_id:
+        return
+
+    processed = st.session_state.setdefault("processed_public_data_request_ids", [])
+    if request_id in processed:
+        return
+
+    _public_data_snapshot.clear()
+    processed.append(request_id)
+    st.session_state["processed_public_data_request_ids"] = processed[-30:]
+    st.session_state["public_data_response"] = {
+        "requestId": request_id,
+        "ok": True,
+        "message": "EKAP ve ekonomi verileri yenilendi." if value.get("manual") else "",
+    }
+    st.rerun()
 
 def _make_prompt(payload: dict) -> str:
     prompt_key = payload.get("promptKey", "ai")
@@ -204,7 +314,14 @@ def _call_gemini(payload: dict) -> str:
 
 
 def _handle_component_value(value: object) -> None:
-    if not isinstance(value, dict) or value.get("type") != "ai_request":
+    if not isinstance(value, dict):
+        return
+
+    if value.get("type") == "public_data_refresh":
+        _handle_public_data_refresh(value)
+        return
+
+    if value.get("type") != "ai_request":
         return
 
     request_id = str(value.get("requestId") or "")
@@ -253,6 +370,8 @@ component_value = kongre_component(
     key="kongre_yonetimi_sistemi",
     default=None,
     ai_response=st.session_state.get("ai_response"),
+    public_data=_public_data_snapshot(),
+    public_data_response=st.session_state.get("public_data_response"),
 )
 _handle_component_value(component_value)
 
