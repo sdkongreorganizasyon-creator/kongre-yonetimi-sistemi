@@ -2,8 +2,9 @@ name: EVENTIX Market Data Sync
 
 on:
   schedule:
-    # GitHub zamanlayıcısı verileri yaklaşık 5 dakikada bir kontrol eder.
-    - cron: "*/5 * * * *"
+    # Borsa İstanbul halka açık verileri en az 15 dakika gecikmeli olduğundan
+    # veriler 15 dakikada bir kontrol edilir.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ permissions:
 jobs:
   sync-public-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Repository checkout
         uses: actions/checkout@v6
@@ -26,6 +27,15 @@ jobs:
 
       - name: Install dependencies
         run: python -m pip install -r automation/requirements.txt
+
+      - name: Ensure headless browser is available
+        shell: bash
+        run: |
+          if command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1; then
+            echo "Runner browser found."
+          else
+            python -m playwright install --with-deps chromium
+          fi
 
       - name: Sync Altinkaynak and Borsa Istanbul data to Firestore
         env:
