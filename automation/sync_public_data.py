@@ -1,22 +1,32 @@
-"""EVENTIX market-data synchronizer.
+"""EVENTIX live market-data synchronizer.
 
-The job reads the public pages requested by the user and stores one compact
-snapshot in Firestore at ``system_public/economy``.
+Writes a compact economy snapshot to Firestore document
+``system_public/economy`` without changing any other application data.
 
-Sources:
-- Altinkaynak live rates: USD, EUR, GBP, gram gold, quarter gold
-- Borsa Istanbul home page: BIST 30, BIST 50, BIST 100
+Sources
+-------
+Altinkaynak official data services:
+- Currency.json: USD, EUR, GBP
+- Gold.json: gram gold, quarter gold
 
-Tender records are not read, imported, updated, or deleted by this script.
+Borsa Istanbul public index pages:
+- /endeks/xu030: BIST 30
+- /endeks/xu050: BIST 50
+- /endeks/xu100: BIST 100
+
+Borsa Istanbul states that public market data is delayed by at least 15 minutes.
 """
 
 from __future__ import annotations
 
+import gzip
 import html
 import json
 import os
 import re
+import shutil
 import sys
+import time
 import unicodedata
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -32,8 +42,23 @@ except ModuleNotFoundError:
     credentials = None
     firestore = None
 
-ALTINKAYNAK_URL = "https://www.altinkaynak.com/canli-kurlar/"
-BORSA_ISTANBUL_URL = "https://www.borsaistanbul.com/"
+try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright
+except ModuleNotFoundError:
+    PlaywrightTimeoutError = TimeoutError
+    sync_playwright = None
+
+ALTINKAYNAK_CURRENCY_URL = "https://rest.altinkaynak.com/Currency.json"
+ALTINKAYNAK_GOLD_URL = "https://rest.altinkaynak.com/Gold.json"
+ALTINKAYNAK_CURRENCY_PAGE = "https://www.altinkaynak.com/Doviz/Kur/Guncel"
+ALTINKAYNAK_GOLD_PAGE = "https://www.altinkaynak.com/Altin/Kur/Guncel"
+
+BIST_URLS = {
+    "XU030": "https://www.borsaistanbul.com/endeks/xu030",
+    "XU050": "https://www.borsaistanbul.com/endeks/xu050",
+    "XU100": "https://www.borsaistanbul.com/endeks/xu100",
+}
 
 ORDER = (
     "USDTRY",
@@ -46,85 +71,63 @@ ORDER = (
     "XU100",
 )
 
-ASSETS: dict[str, dict[str, Any]] = {
-    "USDTRY": {
-        "label": "Dolar",
-        "aliases": ("AMERIKAN DOLARI", "ABD DOLARI", "DOLAR", "USD"),
-        "bounds": (1.0, 500.0),
-        "source": "ALTINKAYNAK",
-        "unit": "TRY",
-    },
-    "EURTRY": {
-        "label": "Euro",
-        "aliases": ("EURO", "EUR"),
-        "bounds": (1.0, 600.0),
-        "source": "ALTINKAYNAK",
-        "unit": "TRY",
-    },
-    "GBPTRY": {
-        "label": "Sterlin",
-        "aliases": ("INGILIZ STERLINI", "STERLIN", "GBP"),
-        "bounds": (1.0, 800.0),
-        "source": "ALTINKAYNAK",
-        "unit": "TRY",
-    },
-    "GRAM_GOLD": {
-        "label": "Gram Altın",
-        "aliases": ("GRAM ALTIN", "GRAM ALTIN 24", "HAS ALTIN"),
-        "bounds": (100.0, 100000.0),
-        "source": "ALTINKAYNAK",
-        "unit": "TRY",
-    },
-    "QUARTER_GOLD": {
-        "label": "Çeyrek Altın",
-        "aliases": ("CEYREK ALTIN", "YENI CEYREK", "CEYREK"),
-        "bounds": (100.0, 500000.0),
-        "source": "ALTINKAYNAK",
-        "unit": "TRY",
-    },
-    "XU030": {
-        "label": "BIST 30",
-        "aliases": ("BIST 30", "XU030", "BIST30"),
-        "bounds": (100.0, 1000000.0),
-        "source": "BORSA_ISTANBUL",
-        "unit": "INDEX",
-    },
-    "XU050": {
-        "label": "BIST 50",
-        "aliases": ("BIST 50", "XU050", "BIST50"),
-        "bounds": (100.0, 1000000.0),
-        "source": "BORSA_ISTANBUL",
-        "unit": "INDEX",
-    },
-    "XU100": {
-        "label": "BIST 100",
-        "aliases": ("BIST 100", "XU100", "BIST100"),
-        "bounds": (100.0, 1000000.0),
-        "source": "BORSA_ISTANBUL",
-        "unit": "INDEX",
-    },
+LABELS = {
+    "USDTRY": "Dolar",
+    "EURTRY": "Euro",
+    "GBPTRY": "Sterlin",
+    "GRAM_GOLD": "Gram Altın",
+    "QUARTER_GOLD": "Çeyrek Altın",
+    "XU030": "BIST 30",
+    "XU050": "BIST 50",
+    "XU100": "BIST 100",
 }
 
+ALTINKAYNAK_CODE_MAP = {
+    "USD": "USDTRY",
+    "EUR": "EURTRY",
+    "GBP": "GBPTRY",
+    "GA": "GRAM_GOLD",
+    "C": "QUARTER_GOLD",
+}
 
-class PageCollector(HTMLParser):
-    """Collect table rows, scripts, and visible text without extra packages."""
+ALTINKAYNAK_ALIASES = {
+    "USDTRY": ("USD", "AMERIKAN DOLARI", "ABD DOLARI", "DOLAR"),
+    "EURTRY": ("EUR", "EURO"),
+    "GBPTRY": ("GBP", "INGILIZ STERLINI", "STERLIN"),
+    "GRAM_GOLD": ("GRAM ALTIN", "GRAM", "24 AYAR"),
+    "QUARTER_GOLD": ("CEYREK ALTIN", "CEYREK"),
+}
+
+VALUE_BOUNDS = {
+    "USDTRY": (1.0, 1000.0),
+    "EURTRY": (1.0, 1000.0),
+    "GBPTRY": (1.0, 1000.0),
+    "GRAM_GOLD": (100.0, 1_000_000.0),
+    "QUARTER_GOLD": (100.0, 2_000_000.0),
+    "XU030": (100.0, 2_000_000.0),
+    "XU050": (100.0, 2_000_000.0),
+    "XU100": (100.0, 2_000_000.0),
+}
+
+NUMBER_RE = re.compile(r"[-+]?\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|[-+]?\d+(?:[.,]\d+)?")
+DATE_TIME_RE = re.compile(r"\d{2}\.\d{2}\.\d{4}\s*(?:-|–)?\s*\d{2}:\d{2}:\d{2}")
+
+
+class VisibleTextCollector(HTMLParser):
+    """Collect visible text tokens and table rows using the standard library."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
+        self.tokens: list[str] = []
         self.rows: list[list[str]] = []
-        self.scripts: list[str] = []
-        self.text_parts: list[str] = []
         self._row: list[str] | None = None
         self._cell: list[str] | None = None
-        self._script: list[str] | None = None
-        self._hidden_depth = 0
+        self._hidden = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
-        if tag in {"style", "noscript"}:
-            self._hidden_depth += 1
-        elif tag == "script":
-            self._script = []
+        if tag in {"script", "style", "noscript", "svg"}:
+            self._hidden += 1
         elif tag == "tr":
             self._row = []
         elif tag in {"td", "th"} and self._row is not None:
@@ -132,14 +135,8 @@ class PageCollector(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
-        if tag in {"style", "noscript"} and self._hidden_depth:
-            self._hidden_depth -= 1
-        elif tag == "script":
-            if self._script is not None:
-                value = compact_text(" ".join(self._script))
-                if value:
-                    self.scripts.append(value)
-            self._script = None
+        if tag in {"script", "style", "noscript", "svg"} and self._hidden:
+            self._hidden -= 1
         elif tag in {"td", "th"} and self._row is not None and self._cell is not None:
             value = compact_text(" ".join(self._cell))
             self._row.append(value)
@@ -151,20 +148,14 @@ class PageCollector(HTMLParser):
             self._cell = None
 
     def handle_data(self, data: str) -> None:
+        if self._hidden:
+            return
         value = compact_text(data)
         if not value:
             return
-        if self._script is not None:
-            self._script.append(value)
-            return
+        self.tokens.append(value)
         if self._cell is not None:
             self._cell.append(value)
-        if not self._hidden_depth:
-            self.text_parts.append(value)
-
-
-NUMBER_RE = re.compile(r"(?<![\w/])[-+]?\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|(?<![\w/])[-+]?\d+(?:[.,]\d+)?")
-PERCENT_RE = re.compile(r"([-+]?\d+(?:[.,]\d+)?)\s*%")
 
 
 def env(name: str, default: str = "") -> str:
@@ -180,22 +171,29 @@ def compact_text(value: Any) -> str:
 
 
 def normalized_text(value: Any) -> str:
-    text = compact_text(value).upper()
-    text = text.translate(str.maketrans({"İ": "I", "I": "I", "Ş": "S", "Ğ": "G", "Ü": "U", "Ö": "O", "Ç": "C"}))
+    text = compact_text(value).upper().translate(
+        str.maketrans({"İ": "I", "Ş": "S", "Ğ": "G", "Ü": "U", "Ö": "O", "Ç": "C"})
+    )
     text = unicodedata.normalize("NFKD", text)
     return "".join(ch for ch in text if not unicodedata.combining(ch))
 
 
 def normalize_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
     raw = compact_text(value)
     if not raw:
         return None
     raw = raw.replace("₺", "").replace("TL", "").replace("TRY", "").replace("%", "").replace(" ", "")
-    if not raw:
+    raw = re.sub(r"[^0-9,\.\-+]", "", raw)
+    if not raw or raw in {"-", "+", ".", ","}:
         return None
 
-    # Turkish-formatted values normally use a dot for thousands and comma for decimals.
     if "," in raw and "." in raw:
+        # Turkish style: 12.345,67. International style: 12,345.67.
         if raw.rfind(",") > raw.rfind("."):
             raw = raw.replace(".", "").replace(",", ".")
         else:
@@ -205,56 +203,61 @@ def normalize_number(value: Any) -> float | None:
     elif raw.count(".") > 1:
         raw = raw.replace(".", "")
 
-    raw = re.sub(r"[^0-9+\-.]", "", raw)
     try:
         return float(raw)
     except ValueError:
         return None
 
 
-def number_tokens(text: str, bounds: tuple[float, float]) -> list[float]:
+def values_in_text(text: str, bounds: tuple[float, float]) -> list[float]:
     lower, upper = bounds
     values: list[float] = []
     for match in NUMBER_RE.findall(compact_text(text)):
         value = normalize_number(match)
         if value is None or not (lower <= abs(value) <= upper):
             continue
-        # Skip likely years and compact dates for currency rows.
-        if lower < 100 and 1900 <= value <= 2100:
-            continue
         values.append(value)
     return values
 
 
-def percent_from_text(text: str) -> float | None:
-    matches = PERCENT_RE.findall(compact_text(text))
-    if not matches:
-        return None
-    return normalize_number(matches[-1])
+def request_bytes(url: str, *, accept: str, attempts: int = 3) -> tuple[bytes, str]:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        request = Request(
+            url,
+            headers={
+                "Accept": accept,
+                "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.6",
+                "Accept-Encoding": "gzip, identity",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                ),
+            },
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=45) as response:
+                raw = response.read()
+                if str(response.headers.get("Content-Encoding") or "").lower() == "gzip":
+                    raw = gzip.decompress(raw)
+                return raw, str(response.headers.get("Content-Type") or "")
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt < attempts:
+                time.sleep(attempt * 2)
+    raise RuntimeError(f"{url} okunamadı: {last_error}") from last_error
 
 
-def fetch_page(url: str) -> str:
-    request = Request(
-        url,
-        headers={
-            "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-            "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.6",
-            "Cache-Control": "no-cache",
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36 EVENTIX/3.0"
-            ),
-        },
-        method="GET",
-    )
-    try:
-        with urlopen(request, timeout=45) as response:
-            raw = response.read()
-            charset = response.headers.get_content_charset() or "utf-8"
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError(f"{url} okunamadı: {exc}") from exc
-
-    for encoding in (charset, "utf-8", "iso-8859-9", "windows-1254"):
+def decode_html(raw: bytes, content_type: str = "") -> str:
+    encodings: list[str] = []
+    match = re.search(r"charset=([\w-]+)", content_type, re.IGNORECASE)
+    if match:
+        encodings.append(match.group(1))
+    encodings.extend(["utf-8", "windows-1254", "iso-8859-9"])
+    for encoding in encodings:
         try:
             return raw.decode(encoding)
         except (LookupError, UnicodeDecodeError):
@@ -262,173 +265,417 @@ def fetch_page(url: str) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def parse_page(page_html: str) -> PageCollector:
-    collector = PageCollector()
+def build_altinkaynak_item(code: str, record: dict[str, Any]) -> dict[str, Any] | None:
+    buying = normalize_number(record.get("Alis") or record.get("alis") or record.get("buy"))
+    selling = normalize_number(record.get("Satis") or record.get("satis") or record.get("sell"))
+    value = selling or buying
+    if value is None:
+        return None
+
+    lower, upper = VALUE_BOUNDS[code]
+    if not (lower <= value <= upper):
+        return None
+
+    change = normalize_number(record.get("Change") or record.get("Degisim") or record.get("change"))
+    updated = compact_text(
+        record.get("GuncellenmeZamani")
+        or record.get("guncellenmeZamani")
+        or record.get("updatedAt")
+        or ""
+    )
+    item: dict[str, Any] = {
+        "code": code,
+        "label": LABELS[code],
+        "value": round(value, 6),
+        "changePercent": None if change is None else round(change, 4),
+        "unit": "TRY",
+        "source": "ALTINKAYNAK",
+        "sourceUrl": "https://www.altinkaynak.com/canli-kurlar/",
+        "sourceDate": updated,
+        "stale": False,
+        "fetchedAt": now_iso(),
+    }
+    if buying is not None:
+        item["buying"] = round(buying, 6)
+    if selling is not None:
+        item["selling"] = round(selling, 6)
+    notes: list[str] = []
+    if buying is not None:
+        notes.append(f"Alış {buying:.2f}")
+    if selling is not None:
+        notes.append(f"Satış {selling:.2f}")
+    item["note"] = " • ".join(notes)
+    return item
+
+
+def parse_altinkaynak_json(raw: bytes, wanted_codes: Iterable[str]) -> dict[str, dict[str, Any]]:
+    try:
+        payload = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Altınkaynak JSON verisi çözümlenemedi.") from exc
+    if not isinstance(payload, list):
+        raise RuntimeError("Altınkaynak JSON yanıtı liste biçiminde değil.")
+
+    wanted = set(wanted_codes)
+    result: dict[str, dict[str, Any]] = {}
+    for record in payload:
+        if not isinstance(record, dict):
+            continue
+        provider_code = compact_text(record.get("Kod") or record.get("kod")).upper()
+        code = ALTINKAYNAK_CODE_MAP.get(provider_code)
+        if code not in wanted:
+            continue
+        item = build_altinkaynak_item(code, record)
+        if item is not None:
+            result[code] = item
+    return result
+
+
+def collector_from_html(page_html: str) -> VisibleTextCollector:
+    collector = VisibleTextCollector()
     collector.feed(page_html)
     collector.close()
     return collector
 
 
-def alias_match(text: str, aliases: Iterable[str]) -> bool:
-    normalized = normalized_text(text)
+def alias_match(value: str, aliases: Iterable[str]) -> bool:
+    normalized = normalized_text(value)
     return any(normalized_text(alias) in normalized for alias in aliases)
 
 
-def key_value_near_alias(text: str, aliases: Iterable[str], keys: Iterable[str], bounds: tuple[float, float]) -> float | None:
-    normalized = normalized_text(text)
-    alias_positions = [normalized.find(normalized_text(alias)) for alias in aliases]
-    alias_positions = [position for position in alias_positions if position >= 0]
-    if not alias_positions:
-        return None
+def parse_altinkaynak_html(page_html: str, wanted_codes: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Fallback parser for Altinkaynak public pages."""
 
-    position = min(alias_positions)
-    window = text[max(0, position - 800) : position + 1600]
-    for key in keys:
-        pattern = re.compile(
-            rf"[\"']?{re.escape(key)}[\"']?\s*[:=]\s*[\"']?([-+]?\d[\d.,]*)",
-            re.IGNORECASE,
-        )
-        match = pattern.search(window)
-        if not match:
-            continue
-        value = normalize_number(match.group(1))
-        if value is not None and bounds[0] <= abs(value) <= bounds[1]:
-            return value
-    return None
+    collector = collector_from_html(page_html)
+    wanted = set(wanted_codes)
+    result: dict[str, dict[str, Any]] = {}
+
+    for code in wanted:
+        aliases = ALTINKAYNAK_ALIASES[code]
+        bounds = VALUE_BOUNDS[code]
+        for row in collector.rows:
+            joined = " | ".join(row)
+            if not alias_match(joined, aliases):
+                continue
+            prices: list[float] = []
+            change: float | None = None
+            for cell in row:
+                if "%" in cell:
+                    candidates = values_in_text(cell, (-1000.0, 1000.0))
+                    if candidates:
+                        change = candidates[-1]
+                    continue
+                if alias_match(cell, aliases):
+                    continue
+                prices.extend(values_in_text(cell, bounds))
+            if len(prices) < 2:
+                continue
+            buying, selling = prices[-2], prices[-1]
+            record = {
+                "Alis": buying,
+                "Satis": selling,
+                "Change": change,
+            }
+            item = build_altinkaynak_item(code, record)
+            if item is not None:
+                result[code] = item
+                break
+    return result
 
 
-def parse_structured_asset(text: str, code: str) -> dict[str, Any] | None:
-    spec = ASSETS[code]
-    aliases = spec["aliases"]
-    bounds = spec["bounds"]
-    if not alias_match(text, aliases):
-        return None
+def fetch_altinkaynak() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    result: dict[str, dict[str, Any]] = {}
+    errors: dict[str, str] = {}
 
-    buying = key_value_near_alias(text, aliases, ("alis", "alış", "buy", "buying", "bid"), bounds)
-    selling = key_value_near_alias(text, aliases, ("satis", "satış", "sell", "selling", "ask"), bounds)
-    value = key_value_near_alias(text, aliases, ("last", "value", "price", "close", "current", "rate"), bounds)
-    change = key_value_near_alias(
-        text,
-        aliases,
-        ("changePercent", "change_percent", "percentChange", "dailyChange", "degisim", "değişim", "yuzde"),
-        (-1000.0, 1000.0),
+    source_specs = (
+        (
+            "Altınkaynak döviz",
+            ALTINKAYNAK_CURRENCY_URL,
+            ALTINKAYNAK_CURRENCY_PAGE,
+            ("USDTRY", "EURTRY", "GBPTRY"),
+        ),
+        (
+            "Altınkaynak altın",
+            ALTINKAYNAK_GOLD_URL,
+            ALTINKAYNAK_GOLD_PAGE,
+            ("GRAM_GOLD", "QUARTER_GOLD"),
+        ),
     )
 
-    selected = selling or value or buying
-    if selected is None:
-        return None
-    return build_item(code, selected, buying, selling, change)
+    for source_name, json_url, page_url, codes in source_specs:
+        source_errors: list[str] = []
+        try:
+            raw, _ = request_bytes(json_url, accept="application/json,text/plain;q=0.9,*/*;q=0.5")
+            result.update(parse_altinkaynak_json(raw, codes))
+        except Exception as exc:
+            source_errors.append(f"JSON: {exc}")
+
+        missing = [code for code in codes if code not in result]
+        if missing:
+            try:
+                raw, content_type = request_bytes(page_url, accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
+                result.update(parse_altinkaynak_html(decode_html(raw, content_type), missing))
+            except Exception as exc:
+                source_errors.append(f"HTML: {exc}")
+
+        missing = [code for code in codes if code not in result]
+        if missing:
+            errors[source_name] = f"Eksik: {', '.join(missing)}. " + " | ".join(source_errors)
+
+    return result, errors
 
 
-def parse_row_asset(rows: list[list[str]], code: str) -> dict[str, Any] | None:
-    spec = ASSETS[code]
-    aliases = spec["aliases"]
-    bounds = spec["bounds"]
+def next_numeric_values(tokens: list[str], start: int, bounds: tuple[float, float], limit: int = 16) -> list[float]:
+    values: list[float] = []
+    for token in tokens[start : start + limit]:
+        values.extend(values_in_text(token, bounds))
+        if len(values) >= 2:
+            break
+    return values
+
+
+def find_token(tokens: list[str], needle: str, start: int = 0, end: int | None = None) -> int:
+    target = normalized_text(needle)
+    upper = len(tokens) if end is None else min(end, len(tokens))
+    for index in range(max(0, start), upper):
+        if target in normalized_text(tokens[index]):
+            return index
+    return -1
+
+
+def parse_bist_rows(rows: list[list[str]], code: str) -> tuple[float | None, float | None]:
+    value: float | None = None
+    change: float | None = None
+    bounds = VALUE_BOUNDS[code]
     for row in rows:
-        joined = " | ".join(row)
-        if not alias_match(joined, aliases):
+        if not row:
             continue
-
-        percent = percent_from_text(joined)
-        numeric_cells: list[float] = []
-        for cell in row:
-            if "%" in cell or alias_match(cell, aliases):
-                continue
-            numeric_cells.extend(number_tokens(cell, bounds))
-
-        # Remove duplicate values caused by nested spans in the same row.
-        deduped: list[float] = []
-        for value in numeric_cells:
-            if not deduped or abs(deduped[-1] - value) > 1e-12:
-                deduped.append(value)
-
-        if not deduped:
-            continue
-        if spec["unit"] == "INDEX":
-            return build_item(code, deduped[0], None, None, percent)
-
-        buying = deduped[0]
-        selling = deduped[1] if len(deduped) > 1 else None
-        return build_item(code, selling or buying, buying, selling, percent)
-    return None
+        label = normalized_text(row[0])
+        joined = " | ".join(row[1:])
+        if label == "DEGER" or label.startswith("DEGER "):
+            candidates = values_in_text(joined, bounds)
+            if candidates:
+                value = candidates[0]
+        elif "ONCEKI KAPANISA GORE DEGISIM" in label:
+            candidates = values_in_text(joined, (-1000.0, 1000.0))
+            if candidates:
+                change = candidates[0]
+    return value, change
 
 
-def parse_window_asset(text: str, code: str) -> dict[str, Any] | None:
-    spec = ASSETS[code]
-    normalized = normalized_text(text)
-    bounds = spec["bounds"]
-    for alias in spec["aliases"]:
-        marker = normalized_text(alias)
-        position = normalized.find(marker)
-        if position < 0:
-            continue
-        window = text[max(0, position - 150) : position + 700]
-        for candidate in spec["aliases"]:
-            window = re.sub(re.escape(candidate), " ", window, flags=re.IGNORECASE)
-        values = number_tokens(window, bounds)
-        if not values:
-            continue
-        percent = percent_from_text(window)
-        if spec["unit"] == "INDEX":
-            return build_item(code, values[0], None, None, percent)
-        buying = values[0]
-        selling = values[1] if len(values) > 1 else None
-        return build_item(code, selling or buying, buying, selling, percent)
-    return None
+def parse_bist_text(tokens: list[str], code: str) -> tuple[float | None, float | None, str]:
+    bounds = VALUE_BOUNDS[code]
+    section = find_token(tokens, "Güncel Endeks Değerleri")
+    if section < 0:
+        section = find_token(tokens, LABELS[code])
+    if section < 0:
+        section = 0
+
+    value: float | None = None
+    change: float | None = None
+
+    value_label = find_token(tokens, "Değer", section, section + 80)
+    if value_label >= 0:
+        candidates = next_numeric_values(tokens, value_label + 1, bounds, 12)
+        if candidates:
+            value = candidates[0]
+
+    change_label = find_token(tokens, "Önceki Kapanışa Göre Değişim", section, section + 120)
+    if change_label >= 0:
+        candidates = next_numeric_values(tokens, change_label + 1, (-1000.0, 1000.0), 10)
+        if candidates:
+            change = candidates[0]
+
+    source_date = ""
+    for token in tokens[section : section + 30]:
+        match = DATE_TIME_RE.search(token)
+        if match:
+            source_date = compact_text(match.group(0))
+            break
+    return value, change, source_date
 
 
-def build_item(
-    code: str,
-    value: float,
-    buying: float | None,
-    selling: float | None,
-    change: float | None,
-) -> dict[str, Any]:
-    spec = ASSETS[code]
-    item: dict[str, Any] = {
+def parse_bist_embedded(page_html: str, code: str) -> tuple[float | None, float | None]:
+    """Last-resort parser for common JSON fields embedded in the page source."""
+
+    normalized_code = re.escape(code)
+    bounds = VALUE_BOUNDS[code]
+    windows: list[str] = []
+    for match in re.finditer(normalized_code, page_html, re.IGNORECASE):
+        windows.append(page_html[max(0, match.start() - 1000) : match.start() + 3000])
+        if len(windows) >= 8:
+            break
+
+    value_keys = ("last", "value", "currentValue", "indexValue", "close", "lastPrice")
+    change_keys = ("changePercent", "changeRate", "percentChange", "dailyChange")
+    value: float | None = None
+    change: float | None = None
+
+    for window in windows:
+        for key in value_keys:
+            match = re.search(rf'["\']?{re.escape(key)}["\']?\s*[:=]\s*["\']?([-+]?\d[\d.,]*)', window, re.IGNORECASE)
+            if match:
+                candidate = normalize_number(match.group(1))
+                if candidate is not None and bounds[0] <= candidate <= bounds[1]:
+                    value = candidate
+                    break
+        for key in change_keys:
+            match = re.search(rf'["\']?{re.escape(key)}["\']?\s*[:=]\s*["\']?([-+]?\d[\d.,]*)', window, re.IGNORECASE)
+            if match:
+                candidate = normalize_number(match.group(1))
+                if candidate is not None and -1000 <= candidate <= 1000:
+                    change = candidate
+                    break
+        if value is not None:
+            break
+    return value, change
+
+
+def parse_bist_page(page_html: str, code: str) -> dict[str, Any]:
+    collector = collector_from_html(page_html)
+    row_value, row_change = parse_bist_rows(collector.rows, code)
+    text_value, text_change, source_date = parse_bist_text(collector.tokens, code)
+    embedded_value, embedded_change = parse_bist_embedded(page_html, code)
+
+    value = row_value or text_value or embedded_value
+    change = row_change if row_change is not None else text_change
+    if change is None:
+        change = embedded_change
+    if value is None:
+        raise RuntimeError(f"{LABELS[code]} değeri Borsa İstanbul sayfasında bulunamadı.")
+
+    return {
         "code": code,
-        "label": spec["label"],
-        "value": round(float(value), 6),
-        "changePercent": None if change is None else round(float(change), 4),
-        "unit": spec["unit"],
-        "source": spec["source"],
-        "sourceUrl": ALTINKAYNAK_URL if spec["source"] == "ALTINKAYNAK" else BORSA_ISTANBUL_URL,
+        "label": LABELS[code],
+        "value": round(value, 6),
+        "changePercent": None if change is None else round(change, 4),
+        "unit": "INDEX",
+        "source": "BORSA_ISTANBUL",
+        "sourceUrl": BIST_URLS[code],
+        "sourceDate": source_date,
+        "note": "Borsa İstanbul verisi (en az 15 dakika gecikmeli)",
+        "stale": False,
+        "fetchedAt": now_iso(),
     }
-    if buying is not None:
-        item["buying"] = round(float(buying), 6)
-    if selling is not None:
-        item["selling"] = round(float(selling), 6)
-
-    if spec["unit"] == "TRY":
-        note_parts: list[str] = []
-        if buying is not None:
-            note_parts.append(f"Alış {buying:.2f}")
-        if selling is not None:
-            note_parts.append(f"Satış {selling:.2f}")
-        item["note"] = " • ".join(note_parts)
-    else:
-        item["note"] = "Borsa İstanbul endeksi"
-    return item
 
 
-def extract_assets(page_html: str, codes: Iterable[str]) -> dict[str, dict[str, Any]]:
-    collector = parse_page(page_html)
-    script_text = "\n".join(collector.scripts)
-    visible_text = " | ".join(collector.text_parts)
-    full_text = compact_text(page_html)
-    results: dict[str, dict[str, Any]] = {}
+def parse_bist_rendered_text(body_text: str, code: str) -> dict[str, Any]:
+    tokens = [compact_text(line) for line in str(body_text or "").splitlines() if compact_text(line)]
+    value, change, source_date = parse_bist_text(tokens, code)
+    if value is None:
+        raise RuntimeError(f"{LABELS[code]} değeri render edilmiş Borsa İstanbul sayfasında bulunamadı.")
+    return {
+        "code": code,
+        "label": LABELS[code],
+        "value": round(value, 6),
+        "changePercent": None if change is None else round(change, 4),
+        "unit": "INDEX",
+        "source": "BORSA_ISTANBUL",
+        "sourceUrl": BIST_URLS[code],
+        "sourceDate": source_date,
+        "note": "Borsa İstanbul verisi (en az 15 dakika gecikmeli)",
+        "stale": False,
+        "fetchedAt": now_iso(),
+    }
 
-    for code in codes:
-        item = parse_row_asset(collector.rows, code)
-        if item is None and script_text:
-            item = parse_structured_asset(script_text, code)
-        if item is None:
-            item = parse_structured_asset(full_text, code)
-        if item is None:
-            item = parse_window_asset(visible_text, code)
-        if item is not None:
-            results[code] = item
-    return results
+
+def browser_executable() -> str | None:
+    configured = env("BROWSER_EXECUTABLE_PATH")
+    if configured:
+        return configured
+    for candidate in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        path = shutil.which(candidate)
+        if path:
+            return path
+    return None
+
+
+def fetch_bist_rendered(codes: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    wanted = list(codes)
+    if not wanted:
+        return {}, {}
+    if sync_playwright is None:
+        return {}, {LABELS[code]: "playwright paketi yüklü değil." for code in wanted}
+
+    result: dict[str, dict[str, Any]] = {}
+    errors: dict[str, str] = {}
+    executable = browser_executable()
+
+    try:
+        with sync_playwright() as playwright:
+            launch_options: dict[str, Any] = {
+                "headless": True,
+                "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+            }
+            if executable:
+                launch_options["executable_path"] = executable
+            browser = playwright.chromium.launch(**launch_options)
+            context = browser.new_context(
+                locale="tr-TR",
+                timezone_id="Europe/Istanbul",
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                ),
+            )
+            try:
+                for code in wanted:
+                    page = context.new_page()
+                    try:
+                        page.goto(BIST_URLS[code], wait_until="domcontentloaded", timeout=90_000)
+                        try:
+                            page.get_by_text("Güncel Endeks Değerleri", exact=False).first.wait_for(timeout=45_000)
+                        except PlaywrightTimeoutError:
+                            pass
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=20_000)
+                        except PlaywrightTimeoutError:
+                            pass
+                        page.wait_for_timeout(4_000)
+                        body_text = page.locator("body").inner_text(timeout=30_000)
+                        result[code] = parse_bist_rendered_text(body_text, code)
+                    except Exception as exc:
+                        errors[LABELS[code]] = str(exc)
+                    finally:
+                        page.close()
+            finally:
+                context.close()
+                browser.close()
+    except Exception as exc:
+        for code in wanted:
+            errors.setdefault(LABELS[code], f"Tarayıcı başlatılamadı: {exc}")
+
+    return result, errors
+
+
+def fetch_bist() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    result: dict[str, dict[str, Any]] = {}
+    static_errors: dict[str, str] = {}
+
+    # Önce hızlı statik HTML okuması denenir. Borsa İstanbul değerleri JavaScript ile
+    # yüklüyorsa eksik kalan endeksler aşağıdaki headless tarayıcı ile render edilir.
+    for code, url in BIST_URLS.items():
+        try:
+            raw, content_type = request_bytes(url, accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
+            result[code] = parse_bist_page(decode_html(raw, content_type), code)
+        except Exception as exc:
+            static_errors[LABELS[code]] = str(exc)
+
+    missing = [code for code in BIST_URLS if code not in result]
+    rendered, rendered_errors = fetch_bist_rendered(missing)
+    result.update(rendered)
+
+    errors: dict[str, str] = {}
+    for code in BIST_URLS:
+        if code in result:
+            continue
+        messages = []
+        if LABELS[code] in static_errors:
+            messages.append(f"Statik okuma: {static_errors[LABELS[code]]}")
+        if LABELS[code] in rendered_errors:
+            messages.append(f"Tarayıcı okuması: {rendered_errors[LABELS[code]]}")
+        errors[LABELS[code]] = " | ".join(messages) or "Borsa İstanbul verisi alınamadı."
+    return result, errors
 
 
 def firestore_client():
@@ -457,31 +704,33 @@ def existing_items(db) -> dict[str, dict[str, Any]]:
     if not isinstance(items, list):
         return {}
     return {
-        str(item.get("code")): item
+        compact_text(item.get("code")): item
         for item in items
         if isinstance(item, dict) and item.get("code")
     }
 
 
-def source_item_codes(source: str) -> tuple[str, ...]:
-    return tuple(code for code in ORDER if ASSETS[code]["source"] == source)
+def apply_calculated_change(item: dict[str, Any], old_item: dict[str, Any] | None) -> None:
+    if item.get("changePercent") is not None or old_item is None:
+        return
+    old_value = normalize_number(old_item.get("value"))
+    new_value = normalize_number(item.get("value"))
+    if old_value in (None, 0) or new_value is None:
+        return
+    item["changePercent"] = round(((new_value - old_value) / old_value) * 100, 4)
 
 
 def sync_economy(db) -> None:
     fresh: dict[str, dict[str, Any]] = {}
-    errors: dict[str, str] = {}
+    source_errors: dict[str, str] = {}
 
-    try:
-        altinkaynak_html = fetch_page(ALTINKAYNAK_URL)
-        fresh.update(extract_assets(altinkaynak_html, source_item_codes("ALTINKAYNAK")))
-    except Exception as exc:  # The other source can still be refreshed.
-        errors["Altınkaynak"] = str(exc)
+    altinkaynak_items, altinkaynak_errors = fetch_altinkaynak()
+    fresh.update(altinkaynak_items)
+    source_errors.update(altinkaynak_errors)
 
-    try:
-        borsa_html = fetch_page(BORSA_ISTANBUL_URL)
-        fresh.update(extract_assets(borsa_html, source_item_codes("BORSA_ISTANBUL")))
-    except Exception as exc:  # The other source can still be refreshed.
-        errors["Borsa İstanbul"] = str(exc)
+    bist_items, bist_errors = fetch_bist()
+    fresh.update(bist_items)
+    source_errors.update(bist_errors)
 
     previous = existing_items(db)
     final_items: list[dict[str, Any]] = []
@@ -491,19 +740,12 @@ def sync_economy(db) -> None:
     for code in ORDER:
         item = fresh.get(code)
         if item is not None:
-            old_item = previous.get(code)
-            if item.get("changePercent") is None and old_item is not None:
-                old_value = normalize_number(old_item.get("value"))
-                new_value = normalize_number(item.get("value"))
-                if old_value not in (None, 0) and new_value is not None:
-                    item["changePercent"] = round(((new_value - old_value) / old_value) * 100, 4)
-            item["stale"] = False
-            item["fetchedAt"] = now_iso()
+            apply_calculated_change(item, previous.get(code))
             final_items.append(item)
             continue
 
         old_item = previous.get(code)
-        if old_item is not None:
+        if old_item is not None and normalize_number(old_item.get("value")) not in (None, 0):
             fallback = dict(old_item)
             fallback["stale"] = True
             fallback["note"] = compact_text(fallback.get("note") or "Önceki başarılı güncellemeden kalan veri")
@@ -513,7 +755,7 @@ def sync_economy(db) -> None:
             missing.append(code)
 
     if missing:
-        details = "; ".join(f"{name}: {message}" for name, message in errors.items())
+        details = "; ".join(f"{name}: {message}" for name, message in source_errors.items())
         raise RuntimeError(
             "Ekonomi paneli için ilk veri seti tamamlanamadı. "
             f"Eksik göstergeler: {', '.join(missing)}. {details}".strip()
@@ -523,23 +765,22 @@ def sync_economy(db) -> None:
         "items": final_items,
         "lastUpdated": now_iso(),
         "source": "ALTINKAYNAK_BORSAISTANBUL",
-        "sourceLabel": "Altınkaynak • Borsa İstanbul",
+        "sourceLabel": "Altınkaynak • Borsa İstanbul (BIST en az 15 dk gecikmeli)",
         "sourceUrls": {
-            "altinkaynak": ALTINKAYNAK_URL,
-            "borsaIstanbul": BORSA_ISTANBUL_URL,
+            "altinkaynak": "https://www.altinkaynak.com/canli-kurlar/",
+            "borsaIstanbul": "https://www.borsaistanbul.com/",
         },
-        "partial": bool(errors or stale_codes),
+        "partial": bool(source_errors or stale_codes),
         "staleCodes": stale_codes,
-        "sourceErrors": errors,
+        "sourceErrors": source_errors,
     }
     db.collection("system_public").document("economy").set(snapshot)
+
     fresh_count = len([item for item in final_items if not item.get("stale")])
-    print(
-        f"{fresh_count}/{len(final_items)} ekonomi göstergesi güncellendi. "
-        "Kaynaklar: Altınkaynak ve Borsa İstanbul."
-    )
-    if errors:
-        print("Kısmi kaynak uyarıları: " + "; ".join(f"{key}: {value}" for key, value in errors.items()))
+    print(f"{fresh_count}/{len(final_items)} ekonomi göstergesi Firestore'a yazıldı.")
+    print("Göstergeler: " + ", ".join(item["label"] for item in final_items))
+    if source_errors:
+        print("Kaynak uyarıları: " + "; ".join(f"{key}: {value}" for key, value in source_errors.items()))
     if stale_codes:
         print("Önceki veriden korunan göstergeler: " + ", ".join(stale_codes))
 
@@ -549,7 +790,6 @@ def main() -> int:
     if db is None:
         print("FIREBASE_SERVICE_ACCOUNT_JSON tanımlı değil; ekonomi senkronizasyonu atlandı.")
         return 0
-
     sync_economy(db)
     return 0
 
