@@ -1126,36 +1126,56 @@
   }
 }
 
-    /* --- Targeted update v6: manual tender radar, top economy panel and compact summary cards --- */
-    .economy-panel{margin-bottom:16px;padding:14px 16px!important;order:0;}
+    /* --- Targeted update v7: requested market cards and calendar-side summaries --- */
+    .economy-panel{margin-bottom:16px;padding:13px 15px!important;order:0;}
     .economy-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
-    .economy-head h3{margin:0!important;}
-    .economy-head span{font-size:11px;color:var(--muted);text-align:right;}
-    .economy-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;}
-    .economy-item{border:1px solid var(--line);border-radius:14px;background:linear-gradient(135deg,#fff,#f7fbff);padding:11px 12px;min-height:76px;}
-    .economy-item b{display:block;font-size:12px;color:#475569;margin-bottom:6px;}
-    .economy-item strong{font-size:19px;line-height:1.1;color:#111827;}
-    .economy-item small{display:block;margin-top:5px;font-size:11px;color:var(--muted);}
-    .economy-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:14px;background:#f8fafc;color:var(--muted);font-size:13px;}
-    .dashboard-calendar-panel{margin-top:2px;}
-    .dashboard-summary-grid{display:grid;grid-template-columns:minmax(230px,.9fr) minmax(360px,1.35fr) minmax(185px,.7fr) minmax(185px,.7fr);gap:14px;margin-top:18px;align-items:stretch;}
-    .compact-invoice-panel{padding:13px 14px!important;}
-    .compact-invoice-panel h3,.upcoming-panel h3{font-size:16px!important;margin-bottom:8px!important;}
-    .compact-invoice-panel .mini-item{padding:7px 0!important;}
-    .compact-invoice-panel .mini-item strong,.compact-invoice-panel .mini-item span{font-size:12px!important;}
-    .compact-invoice-panel .bar{margin-top:8px!important;}
-    .upcoming-panel{padding:13px 14px!important;max-height:250px;overflow:auto;}
-    .upcoming-panel .mini-item{padding:7px 0!important;}
-    .dashboard-mini-card{width:100%;text-align:left;border:1px solid rgba(15,76,129,.18);border-radius:20px;padding:14px;background:linear-gradient(135deg,#fff 0,#fff 58%,#eef6ff 100%);box-shadow:var(--shadow-soft);color:var(--ink);}
-    .dashboard-mini-card:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(31,41,55,.10);}
-    .dashboard-mini-card h3{margin:0 0 10px;font-size:15px;}
-    .dashboard-mini-card small{display:block;margin-top:9px;font-size:10.5px;color:var(--muted);line-height:1.35;}
-    .dashboard-mini-metrics{display:grid;gap:6px;}
-    .dashboard-mini-metrics span{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:10px;background:#eef6ff;color:#0f4c81;font-size:11.5px;font-weight:800;}
-    .dashboard-mini-metrics b{font-size:13px;color:#111827;}
-    @media (max-width:1350px){.dashboard-summary-grid{grid-template-columns:1fr 1.3fr 1fr 1fr;}.dashboard-mini-card{padding:12px;}}
-    @media (max-width:1100px){.economy-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dashboard-summary-grid{grid-template-columns:1fr 1fr!important;}}
-    @media (max-width:720px){.dashboard-summary-grid{grid-template-columns:1fr!important;}.economy-grid{grid-template-columns:1fr 1fr;}}
+    .economy-head h3{margin:0!important;font-size:16px!important;}
+    .economy-head .muted{font-size:10.5px!important;margin-top:3px!important;}
+    .economy-head>span{font-size:9.5px;color:var(--muted);text-align:right;line-height:1.35;}
+    .economy-head>span b{font-size:10px;color:#475569;}
+    .economy-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+    .economy-item{border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,#fff,#f8fbfe);padding:9px 10px;min-height:68px;display:flex;flex-direction:column;justify-content:center;}
+    .economy-item b{display:block;font-size:10.5px;font-weight:700;color:#64748b;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .economy-item strong{font-size:16px;line-height:1.1;font-weight:750;color:#111827;letter-spacing:-.2px;}
+    .economy-item small{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:9.5px;color:var(--muted);line-height:1.2;}
+    .economy-trend{display:inline-flex;align-items:center;gap:4px;font-weight:800;}
+    .economy-trend.up{color:#15803d;}
+    .economy-trend.down{color:#dc2626;}
+    .economy-trend.flat{color:#64748b;}
+    .economy-trend .trend-arrow{font-size:9px;line-height:1;}
+    .economy-source-note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .economy-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:var(--muted);font-size:12px;}
+
+    .dashboard-calendar-layout{display:grid;grid-template-columns:minmax(0,2.15fr) minmax(320px,.85fr);gap:14px;margin-top:2px;align-items:start;}
+    .dashboard-calendar-panel{margin:0;min-width:0;padding:14px!important;}
+    .dashboard-calendar-panel .calendar-head{margin-bottom:8px;}
+    .dashboard-calendar-panel .calendar-head h3{font-size:13.5px!important;}
+    .dashboard-calendar-panel .weekday{font-size:9.5px;}
+    .dashboard-calendar-panel .calendar,.dashboard-calendar-panel .weekdays{gap:5px;}
+    .dashboard-calendar-panel .day{min-height:72px;padding:6px;border-radius:10px;}
+    .dashboard-calendar-panel .day-num{font-size:10.5px;margin-bottom:4px;}
+    .dashboard-calendar-panel .cal-chip{font-size:9px;padding:4px 5px;margin:3px 0;border-radius:7px;}
+    .dashboard-side-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0;}
+    .dashboard-side-grid>.panel,.dashboard-side-grid>.dashboard-mini-card{min-height:0;height:100%;}
+    .compact-invoice-panel,.upcoming-panel{padding:11px 12px!important;box-shadow:var(--shadow-soft)!important;}
+    .compact-invoice-panel h3,.upcoming-panel h3{font-size:13px!important;margin:0 0 7px!important;}
+    .compact-invoice-panel .mini-item,.upcoming-panel .mini-item{padding:5px 0!important;margin-bottom:4px!important;border:0!important;border-bottom:1px solid #eef2f7!important;border-radius:0!important;background:transparent!important;gap:6px!important;}
+    .compact-invoice-panel .mini-item:last-of-type,.upcoming-panel .mini-item:last-of-type{border-bottom:0!important;}
+    .compact-invoice-panel .mini-item strong,.upcoming-panel .mini-item strong{font-size:10.5px!important;font-weight:700!important;}
+    .compact-invoice-panel .mini-item span,.upcoming-panel .mini-item span{font-size:9.5px!important;margin-top:2px!important;}
+    .compact-invoice-panel .bar{height:7px!important;margin-top:6px!important;}
+    .upcoming-panel{max-height:210px;overflow:auto;}
+    .upcoming-panel .badge{font-size:8.5px!important;padding:4px 6px!important;}
+    .dashboard-mini-card{width:100%;text-align:left;border:1px solid rgba(15,76,129,.16);border-radius:16px;padding:11px 12px;background:linear-gradient(135deg,#fff 0,#fff 58%,#eef6ff 100%);box-shadow:var(--shadow-soft);color:var(--ink);}
+    .dashboard-mini-card:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(31,41,55,.09);}
+    .dashboard-mini-card h3{margin:0 0 7px;font-size:12.5px;}
+    .dashboard-mini-card small{display:block;margin-top:6px;font-size:8.8px;color:var(--muted);line-height:1.3;}
+    .dashboard-mini-metrics{display:grid;gap:4px;}
+    .dashboard-mini-metrics span{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px;border-radius:8px;background:#eef6ff;color:#0f4c81;font-size:9.5px;font-weight:750;}
+    .dashboard-mini-metrics b{font-size:10.5px;color:#111827;}
+    @media (max-width:1350px){.dashboard-calendar-layout{grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);}.dashboard-side-grid{grid-template-columns:1fr;}.upcoming-panel{max-height:180px;}}
+    @media (max-width:1100px){.economy-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dashboard-calendar-layout{grid-template-columns:1fr;}.dashboard-side-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dashboard-calendar-panel .day{min-height:76px;}}
+    @media (max-width:720px){.dashboard-side-grid{grid-template-columns:1fr;}.economy-grid{grid-template-columns:1fr 1fr;}.dashboard-calendar-panel{padding:10px!important;}.dashboard-calendar-panel .day{min-height:66px;}}
 
 
   </style>
@@ -1338,17 +1358,28 @@ function navTitleStyle(title){
       const raw=state.publicData?.economy||store.get(KEYS.economy,{});
       return raw&&typeof raw==="object"&&!Array.isArray(raw)?raw:{};
     }
+    const ECONOMY_ORDER=["USDTRY","EURTRY","GBPTRY","GRAM_GOLD","QUARTER_GOLD","XU030","XU050","XU100"];
     function formatEconomyValue(item){
       const value=Number(item?.value);
-      if(Number.isFinite(value))return value.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:4});
-      return esc(item?.value||"-");
+      if(!Number.isFinite(value))return esc(item?.value||"-");
+      const formatted=value.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:item?.unit==="INDEX"?2:2});
+      return item?.unit==="TRY"?`${formatted} ₺`:formatted;
+    }
+    function economyTrendHtml(item){
+      const change=Number(item?.changePercent);
+      if(!Number.isFinite(change))return `<span class="economy-trend flat"><span class="trend-arrow">—</span> Değişim bekleniyor</span>`;
+      const cls=change>0?"up":change<0?"down":"flat";
+      const arrow=change>0?"▲":change<0?"▼":"—";
+      return `<span class="economy-trend ${cls}"><span class="trend-arrow">${arrow}</span>${Math.abs(change).toLocaleString("tr-TR",{maximumFractionDigits:2})}%</span>`;
     }
     function economyPanelHtml(){
       const snapshot=economySnapshot();
-      const items=Array.isArray(snapshot.items)?snapshot.items:[];
+      const rawItems=Array.isArray(snapshot.items)?snapshot.items:[];
+      const itemMap=new Map(rawItems.map(item=>[String(item?.code||""),item]));
+      const items=ECONOMY_ORDER.map(code=>itemMap.get(code)).filter(Boolean);
       const updated=snapshot.lastUpdated?new Date(snapshot.lastUpdated).toLocaleString("tr-TR"):"Veri bekleniyor";
-      const source=snapshot.sourceLabel||snapshot.source||"Güncel ekonomi veri kaynağı";
-      return `<div class="panel economy-panel"><div class="economy-head"><div><h3>Canlı Ekonomi Paneli</h3><div class="muted" style="font-size:12px;margin-top:4px">${esc(source)}</div></div><span>Son güncelleme<br><b>${esc(updated)}</b></span></div>${items.length?`<div class="economy-grid">${items.slice(0,10).map(item=>`<div class="economy-item"><b>${esc(item.label||item.code||"Gösterge")}</b><strong>${formatEconomyValue(item)}</strong><small>${item.changePercent!==undefined&&item.changePercent!==null?`${Number(item.changePercent)>=0?"▲":"▼"} ${Math.abs(Number(item.changePercent)||0).toLocaleString("tr-TR",{maximumFractionDigits:2})}%`:esc(item.note||"")}</small></div>`).join("")}</div>`:`<div class="economy-empty">Ekonomi verisi henüz alınamadı. GitHub Actions içindeki ekonomi senkronizasyonunu bir kez çalıştırın ve Firebase bağlantısını kontrol edin.</div>`}</div>`;
+      const source=snapshot.sourceLabel||"Altınkaynak • Borsa İstanbul";
+      return `<div class="panel economy-panel"><div class="economy-head"><div><h3>Canlı Ekonomi Paneli</h3><div class="muted">${esc(source)}</div></div><span>Son güncelleme<br><b>${esc(updated)}</b></span></div>${items.length?`<div class="economy-grid">${items.map(item=>`<div class="economy-item"><b>${esc(item.label||item.code||"Gösterge")}</b><strong>${formatEconomyValue(item)}</strong><small>${economyTrendHtml(item)}${item.stale?`<span class="economy-source-note">Önceki veri</span>`:""}</small></div>`).join("")}</div>`:`<div class="economy-empty">Ekonomi verisi henüz alınamadı. GitHub Actions içindeki piyasa veri senkronizasyonunu bir kez çalıştırın ve Firebase bağlantısını kontrol edin.</div>`}</div>`;
     }
     function monthKey(value){ const v=String(value||"").slice(0,10); return /^\d{4}-\d{2}/.test(v)?v.slice(0,7):""; }
     function currentMonthKey(){ return today().slice(0,7); }
@@ -1387,8 +1418,7 @@ function navTitleStyle(title){
       ${economyPanelHtml()}
       <div class="cards"><button class="stat-card red" onclick="App.showModule('organizations')"><div class="label">Toplam Organizasyon</div><div class="num">${orgs.length}</div><div class="hint">Kayıtlı etkinlik</div></button><button class="stat-card" onclick="App.showModule('organizations')"><div class="label">Aktif Süreçler</div><div class="num">${active}</div><div class="hint">Planlama/hazırlık/aktif</div></button><button class="stat-card" onclick="App.showModule('organizations')"><div class="label">Tamamlanan</div><div class="num success-text">${completed}</div><div class="hint">Kapanan etkinlik</div></button><button class="stat-card" onclick="App.showModule('invoices')"><div class="label">Toplam Fatura</div><div class="num">${money(revenue)}</div><div class="hint">Tahsil edilen: ${money(collected)}</div></button><button class="stat-card" onclick="App.showModule('risks')"><div class="label">Açık Risk</div><div class="num danger-text">${openRisks.length}</div><div class="hint">Kapanmamış riskler</div></button></div>
       <div class="cards dashboard-alert-cards"><button class="stat-card" onclick="App.showModule('risks')"><div class="label">Kritik İş</div><span class="alert-title">Bugün kritik ${criticalWork} iş var</span><span class="alert-hint">Yüksek/kritik açık risklerden hesaplandı.</span></button><button class="stat-card" onclick="App.showModule('invoices')"><div class="label">Tahsilat Uyarısı</div><span class="alert-title">${overdueInvoices} tahsilat vadesi geçmiş</span><span class="alert-hint">Ödenmemiş ve vadesi geçmiş kayıtlar.</span></button><button class="stat-card" onclick="App.showModule('contracts')"><div class="label">Sözleşme Uyarısı</div><span class="alert-title">${overdueContracts} sözleşme gecikmiş veya süresi geçmiş</span><span class="alert-hint">İmzalanmamış/süresi geçmiş sözleşmeler.</span></button><button class="stat-card" onclick="App.showModule('budgets')"><div class="label">Bütçe Riski</div><span class="alert-title">${budgetRisk?esc(budgetRisk.organization)+' organizasyonunda bütçe aşımı riski var':'Bütçe aşımı riski olan organizasyon görünmüyor'}</span><span class="alert-hint">Finans & Bütçe kayıtlarından hesaplanır.</span></button><button class="stat-card" onclick="App.showModule('suppliers')"><div class="label">Tedarikçi Performansı</div><span class="alert-title">${lowSupplier?esc(lowSupplier.supplier)+' tedarikçinin teslim performansı düşmüş':'Tedarikçi performansında düşük skor görünmüyor'}</span><span class="alert-hint">60 altı performans puanı uyarı sayılır.</span></button></div>
-      <div class="panel dashboard-calendar-panel">${calendarHtml()}</div>
-      <div class="dashboard-summary-grid"><div class="panel compact-invoice-panel"><h3>Fatura & Tahsilat Özeti</h3><div class="mini-item"><div><strong>Toplam Fatura Tutarı</strong><span>${money(revenue)}</span></div></div><div class="mini-item"><div><strong>Tahsil Edilen</strong><span>${money(collected)}</span></div></div><div class="mini-item"><div><strong>Bekleyen</strong><span>${money(Math.max(revenue-collected,0))}</span></div></div><div class="bar"><span style="width:${revenue?Math.min(100,Math.round(collected/revenue*100)):0}%"></span></div></div><div class="panel upcoming-panel"><h3>Yaklaşan Organizasyonlar</h3>${upcoming.length?upcoming.map(o=>`<div class="mini-item"><div><strong>${esc(o.eventName)}</strong><span>${esc(o.customer)} • ${formatDate(o.startDate)} - ${formatDate(o.endDate)}</span></div>${badge(o.status)}</div>`).join(""):`<div class="empty">Yaklaşan organizasyon kaydı bulunmuyor.</div>`}</div><button class="dashboard-mini-card" onclick="App.showModule('tenders')"><h3>EKAP RADARI</h3><div class="dashboard-mini-metrics"><span>Bugün <b>${tenderMetrics.publishedToday}</b></span><span>Uygun <b>${tenderMetrics.suitable}</b></span><span>Yaklaşan <b>${tenderMetrics.approaching}</b></span></div><small>Manuel ihale kayıtları üzerinden hesaplanır.</small></button><div class="dashboard-mini-card"><h3>BAŞARI PANOSU</h3><div class="dashboard-mini-metrics"><span>Organizasyon <b>${success.organizations}</b></span><span>Tahsilat <b>%${success.collectionRate}</b></span><span>Kârlılık <b>%${success.margin}</b></span><span>Yeni Müşteri <b>${success.newCustomers}</b></span></div><small>Bu ayın sistem verileri.</small></div></div>`; }
+      <div class="dashboard-calendar-layout"><div class="panel dashboard-calendar-panel">${calendarHtml()}</div><div class="dashboard-side-grid"><div class="panel compact-invoice-panel"><h3>Fatura & Tahsilat Özeti</h3><div class="mini-item"><div><strong>Toplam Fatura Tutarı</strong><span>${money(revenue)}</span></div></div><div class="mini-item"><div><strong>Tahsil Edilen</strong><span>${money(collected)}</span></div></div><div class="mini-item"><div><strong>Bekleyen</strong><span>${money(Math.max(revenue-collected,0))}</span></div></div><div class="bar"><span style="width:${revenue?Math.min(100,Math.round(collected/revenue*100)):0}%"></span></div></div><div class="panel upcoming-panel"><h3>Yaklaşan Organizasyonlar</h3>${upcoming.length?upcoming.map(o=>`<div class="mini-item"><div><strong>${esc(o.eventName)}</strong><span>${esc(o.customer)} • ${formatDate(o.startDate)} - ${formatDate(o.endDate)}</span></div>${badge(o.status)}</div>`).join(""):`<div class="empty">Yaklaşan organizasyon kaydı bulunmuyor.</div>`}</div><button class="dashboard-mini-card" onclick="App.showModule('tenders')"><h3>EKAP RADARI</h3><div class="dashboard-mini-metrics"><span>Bugün <b>${tenderMetrics.publishedToday}</b></span><span>Uygun <b>${tenderMetrics.suitable}</b></span><span>Yaklaşan <b>${tenderMetrics.approaching}</b></span></div><small>Manuel ihale kayıtları üzerinden hesaplanır.</small></button><div class="dashboard-mini-card"><h3>BAŞARI PANOSU</h3><div class="dashboard-mini-metrics"><span>Organizasyon <b>${success.organizations}</b></span><span>Tahsilat <b>%${success.collectionRate}</b></span><span>Kârlılık <b>%${success.margin}</b></span><span>Yeni Müşteri <b>${success.newCustomers}</b></span></div><small>Bu ayın sistem verileri.</small></div></div></div>`; }
     function quickItem(label,count,fn){return `<div class="mini-item"><div><strong>${esc(label)}</strong><span>${count} kayıt</span></div><button class="btn ghost small" onclick="App.${fn}">Aç</button></div>`}
     function daysUntil(v){ const d=parseDate(v); if(!d)return null; const base=parseDate(today()); return Math.ceil((d-base)/(1000*60*60*24)); }
     function commandInsights(){ const orgs=getList("organizations"), invoices=getList("invoices"), contracts=getList("contracts"), budgets=getList("budgets"), risks=getList("risks"), suppliers=getList("suppliers"), communications=getList("communications"), offers=getList("offers"); const insights=[]; const criticalWork=risks.filter(x=>x.status!=="Kapandı" && ["Kritik","Yüksek"].includes(riskLevel(x))).length; insights.push({title:`Bugün kritik ${criticalWork} iş var`,hint:"Yüksek/kritik açık risk toplamı.",fn:"showModule('risks')"}); const overdueContracts=contracts.filter(x=>x.status!=="İmzalandı" && x.endDate && daysUntil(x.endDate)<0).length; insights.push({title:`${overdueContracts} sözleşme gecikmiş veya süresi geçmiş`,hint:"İmzalanmamış ve bitiş tarihi geçmiş sözleşmeler.",fn:"showModule('contracts')"}); const overdueInvoices=invoices.filter(x=>x.dueDate && daysUntil(x.dueDate)<0 && Number(x.paidAmount||0)<Number(x.amount||0)).length; insights.push({title:`${overdueInvoices} tahsilat vadesi geçmiş`,hint:"Bekleyen tahsilatları Faturalar & Tahsilat modülünden kontrol edin.",fn:"showModule('invoices')"}); const budgetRisk=budgets.filter(x=>Number(x.actualExpense||0)>Number(x.plannedBudget||0) && Number(x.plannedBudget||0)>0); insights.push({title:budgetRisk[0]?`${budgetRisk[0].organization} organizasyonunda bütçe aşımı riski var`:"Bütçe aşımı riski olan organizasyon görünmüyor",hint:budgetRisk[0]?`Planlanan ${money(budgetRisk[0].plannedBudget)}, gerçekleşen gider ${money(budgetRisk[0].actualExpense)}`:"Finans & Bütçe kayıtları güncellendikçe takip edilir.",fn:"showModule('budgets')"}); const weakPay=invoices.reduce((m,x)=>{const due=x.dueDate&&daysUntil(x.dueDate)<0&&Number(x.paidAmount||0)<Number(x.amount||0); if(due)m[x.customer]=(m[x.customer]||0)+1; return m;},{}); const weak=Object.entries(weakPay).sort((a,b)=>b[1]-a[1])[0]; insights.push({title:weak?`${weak[0]} müşterisinin ödeme davranışı bozulmuş`:"Müşteri ödeme davranışında belirgin bozulma yok",hint:weak?`${weak[1]} geciken tahsilat kaydı var`:"Geciken tahsilatlar bu alanda izlenir.",fn:"showModule('invoices')"}); const lowSupplier=suppliers.filter(x=>Number(x.score||0)>0).sort((a,b)=>Number(a.score)-Number(b.score))[0]; insights.push({title:lowSupplier?`${lowSupplier.supplier} tedarikçinin teslim performansı düşmüş`:"Tedarikçi performansında düşük skor görünmüyor",hint:lowSupplier?`Performans puanı: ${lowSupplier.score}`:"Tedarikçi puanı girildikçe takip edilir.",fn:"showModule('suppliers')"}); const staff={}; [...orgs,...risks,...communications].forEach(x=>[x.coordinator,x.assistant,x.owner,x.responsible].filter(Boolean).forEach(u=>staff[u]=(staff[u]||0)+1)); const busiest=Object.entries(staff).sort((a,b)=>b[1]-a[1])[0]; insights.push({title:busiest?`Bu hafta en yoğun personel ${busiest[0]}`:"Personel iş yükü için yeterli kayıt yok",hint:busiest?`${busiest[1]} açık/bağlı kayıt görünüyor`:"Personel alanları dolduruldukça hesaplanır.",fn:"showPerformance"}); const profit=profitRows()[0]; insights.push({title:profit?`Bu ay en kârlı organizasyon: ${profit.organization}`:"Kârlı organizasyon analizi için finans verisi bekleniyor",hint:profit?`Brüt kâr: ${money(profit.grossProfit)}, marj: ${profit.margin}%`:"Kârlılık Analizi modülünü kullanın.",fn:"showProfitability"}); const won=offers.filter(x=>x.status==="Kabul Edildi"||x.status==="Organizasyona Dönüştürüldü").length; insights.push({title:`Teklif kazanım oranı ${offers.length?Math.round(won/offers.length*100):0}%`,hint:`${won}/${offers.length} teklif kazanılmış veya organizasyona dönüşmüş`,fn:"showModule('offers')"}); return insights; }
@@ -1427,7 +1457,7 @@ function navTitleStyle(title){
     function openDetail(key,id){ const m=MODULES[key]; const row=getList(key).find(x=>x.id===id); if(!row)return; const pairs=[["Kayıt No",row.no],...m.fields.map(f=>[f[1], row[f[0]]])]; openModal(`${m.nav} Detayı`, `<div class="detail-grid">${pairs.map(([a,b])=>`<div>${esc(a)}</div><div>${fancyValue(b)}</div>`).join("")}</div>`, `<button class="btn secondary" onclick="App.showModuleForm('${key}','${id}'); App.closeModal();">Düzenle</button><button class="btn ghost" onclick="App.closeModal()">Kapat</button>`); }
     function fancyValue(v){ if(v==null||v==="")return "-"; if(Array.isArray(v)) return v.length?`<ul>${v.map(x=>`<li>${esc(x.name||x.serviceItem||JSON.stringify(x))} ${x.quantity?`- ${esc(x.quantity)} adet`:""} ${x.vatIncluded?`- ${money(x.vatIncluded)}`:""}</li>`).join("")}</ul>`:"-"; if(typeof v==="object"){ const ent=Object.entries(v).filter(([k,val])=>val!==""&&val!=null); return ent.length?`<ul>${ent.map(([k,val])=>`<li>${esc(k)}: ${esc(val)}</li>`).join("")}</ul>`:"-";} if(typeof v==="number")return esc(v); return esc(v); }
     function moduleActions(html){return `<div class="page-actions">${html}</div>`}
-    function moduleButtons(key){return `${key==="tenders"?`<button class="btn secondary small" onclick="App.refreshPublicData()">Verileri Yenile</button>`:""}<button class="btn secondary small" onclick="App.downloadTemplate('${key}')">Boş Excel Şablonu</button><button class="btn secondary small" onclick="App.importExcel('${key}')">İçe Aktar</button><button class="btn ghost small" onclick="App.exportExcel('${key}')">Dışa Aktar</button>${key==="postEvents"?`<button class="btn ghost small" onclick="App.exportPdf('${key}')">PDF</button>`:""}<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`}
+    function moduleButtons(key){return `<button class="btn secondary small" onclick="App.downloadTemplate('${key}')">Boş Excel Şablonu</button><button class="btn secondary small" onclick="App.importExcel('${key}')">İçe Aktar</button><button class="btn ghost small" onclick="App.exportExcel('${key}')">Dışa Aktar</button>${key==="postEvents"?`<button class="btn ghost small" onclick="App.exportPdf('${key}')">PDF</button>`:""}<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`}
     function showCalendar(){ state.viewKey="calendar"; setTitle("Takvim","Aylık organizasyon, kurulum, prova ve söküm görünümü"); $("view").innerHTML=`<div class="panel">${calendarHtml()}</div>${moduleActions(`<button class="btn ghost small" onclick="App.showDashboard()">Anasayfaya Dön</button>`)}`; }
     function calendarHtml(){ const monthDate=new Date(state.calendarMonth.getFullYear(),state.calendarMonth.getMonth(),1); const monthTitle=monthDate.toLocaleDateString("tr-TR",{month:"long",year:"numeric"}); const year=monthDate.getFullYear(), month=monthDate.getMonth(); const first=(new Date(year,month,1).getDay()+6)%7; const days=new Date(year,month+1,0).getDate(); const prev=new Date(year,month,0).getDate(); const cells=[]; for(let i=0;i<42;i++){let day,cm=month,cls="day"; if(i<first){day=prev-first+i+1;cm=month-1;cls+=" other"}else if(i>=first+days){day=i-first-days+1;cm=month+1;cls+=" other"}else{day=i-first+1} const iso=toISO(new Date(year,cm,day)); if(iso===today())cls+=" today"; const items=calendarItems(iso); cells.push(`<div class="${cls}"><div class="day-num"><span>${day}</span>${iso===today()?'<span>Bugün</span>':''}</div>${items.map(x=>`<button class="cal-chip" onclick="App.openCalendarItem('${x.key}','${x.id}')">${esc(x.title)}</button>`).join("")}</div>`); } return `<div class="calendar-head"><h3>Kongre Yönetimi Takvimi - ${esc(monthTitle)}</h3><div class="btn-row"><button class="btn ghost small" onclick="App.moveMonth(-1)">‹ Önceki</button><button class="btn secondary small" onclick="App.thisMonth()">Bugün</button><button class="btn ghost small" onclick="App.moveMonth(1)">Sonraki ›</button></div></div><div class="calendar-scroll"><div class="calendar-scroll"><div class="weekdays">${["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(d=>`<div class="weekday">${d}</div>`).join("")}</div><div class="calendar">${cells.join("")}</div></div>`; }
     function calendarItems(iso){ const out=[]; getList("organizations").forEach(o=>{ [[o.setupDate,"Kurulum"],[o.rehearsalDate,"Prova"],[o.startDate,"Başlangıç"],[o.endDate,"Bitiş"],[o.teardownDate,"Söküm"]].forEach(([d,t])=>{if(d===iso)out.push({key:"organizations",id:o.id,title:`${t}: ${o.eventName}`})}); }); getList("travel").forEach(t=>{ if(t.checkIn===iso)out.push({key:"travel",id:t.id,title:`Check-in: ${t.person}`}); if(t.checkOut===iso)out.push({key:"travel",id:t.id,title:`Check-out: ${t.person}`}); }); return out; }
