@@ -9,12 +9,11 @@ Altinkaynak official data services:
 - Currency.json: USD, EUR, GBP
 - Gold.json: gram gold, quarter gold
 
-Borsa Istanbul public index pages:
-- /endeks/xu030: BIST 30
-- /endeks/xu050: BIST 50
-- /endeks/xu100: BIST 100
+Bloomberg HT public Borsa page:
+- /borsa: BIST 30, BIST 50 and BIST 100
 
-Borsa Istanbul states that public market data is delayed by at least 15 minutes.
+The page data is supplied by Foreks. The synchronizer reads only the three
+public index rows requested by the application.
 """
 
 from __future__ import annotations
@@ -55,10 +54,14 @@ ALTINKAYNAK_CURRENCY_PAGE = "https://www.altinkaynak.com/Doviz/Kur/Guncel"
 ALTINKAYNAK_GOLD_PAGE = "https://www.altinkaynak.com/Altin/Kur/Guncel"
 ALTINKAYNAK_LIVE_PAGE = "https://www.altinkaynak.com/canli-kurlar/"
 
+BLOOMBERGHT_BORSA_URL = "https://www.bloomberght.com/borsa"
+
+# Keep the existing code-to-URL mapping so the rest of the application can
+# continue using XU030, XU050 and XU100 without any UI/data-model changes.
 BIST_URLS = {
-    "XU030": "https://www.borsaistanbul.com/endeks/xu030",
-    "XU050": "https://www.borsaistanbul.com/endeks/xu050",
-    "XU100": "https://www.borsaistanbul.com/endeks/xu100",
+    "XU030": BLOOMBERGHT_BORSA_URL,
+    "XU050": BLOOMBERGHT_BORSA_URL,
+    "XU100": BLOOMBERGHT_BORSA_URL,
 }
 
 ORDER = (
@@ -938,33 +941,123 @@ def fetch_bist_rendered(codes: Iterable[str]) -> tuple[dict[str, dict[str, Any]]
     return result, errors
 
 
-def fetch_bist() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+def parse_bloomberght_bist(page_html: str) -> dict[str, dict[str, Any]]:
+    """Read XU030, XU050 and XU100 from Bloomberg HT's public Borsa table.
+
+    The page currently renders rows in this order:
+    symbol/name, last value, percentage change, point difference, monthly
+    change and annual change. The parser deliberately uses only the first two
+    numeric fields after each symbol so unrelated figures are ignored.
+    """
+
+    collector = collector_from_html(page_html)
     result: dict[str, dict[str, Any]] = {}
-    static_errors: dict[str, str] = {}
 
-    # Önce hızlı statik HTML okuması denenir. Borsa İstanbul değerleri JavaScript ile
-    # yüklüyorsa eksik kalan endeksler aşağıdaki headless tarayıcı ile render edilir.
-    for code, url in BIST_URLS.items():
-        try:
-            raw, content_type = request_bytes(url, accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
-            result[code] = parse_bist_page(decode_html(raw, content_type), code)
-        except Exception as exc:
-            static_errors[LABELS[code]] = str(exc)
+    def build_item(code: str, value: float, change: float | None) -> dict[str, Any]:
+        return {
+            "code": code,
+            "label": LABELS[code],
+            "value": round(value, 6),
+            "changePercent": None if change is None else round(change, 4),
+            "unit": "INDEX",
+            "source": "BLOOMBERGHT_FOREKS",
+            "sourceUrl": BLOOMBERGHT_BORSA_URL,
+            "sourceDate": "",
+            "note": "Bloomberg HT / Foreks Borsa verisi",
+            "stale": False,
+            "fetchedAt": now_iso(),
+        }
 
-    missing = [code for code in BIST_URLS if code not in result]
-    rendered, rendered_errors = fetch_bist_rendered(missing)
-    result.update(rendered)
+    # Preferred path: parse each HTML table row. This is the least ambiguous
+    # representation because the first numeric cell is SON and the second is %.
+    for row in collector.rows:
+        joined = normalized_text(" | ".join(row))
+        for code in BIST_URLS:
+            if code in result or code not in joined:
+                continue
 
-    errors: dict[str, str] = {}
+            value: float | None = None
+            change: float | None = None
+            marker_seen = False
+            for cell in row:
+                normalized = normalized_text(cell)
+                if code in normalized:
+                    marker_seen = True
+                    continue
+                if not marker_seen or "BIST" in normalized or "ENDEKS" in normalized:
+                    continue
+
+                if value is None:
+                    candidates = values_in_text(cell, VALUE_BOUNDS[code])
+                    if candidates:
+                        value = candidates[0]
+                        continue
+
+                if value is not None and change is None:
+                    candidates = values_in_text(cell, (-100.0, 100.0))
+                    if candidates:
+                        change = candidates[0]
+                        break
+
+            if value is not None:
+                result[code] = build_item(code, value, change)
+
+    # Fallback path: some page revisions may not expose semantic <tr> tags.
+    # Scan visible tokens after each exact index symbol and take SON then %.
+    tokens = collector.tokens
     for code in BIST_URLS:
         if code in result:
             continue
-        messages = []
-        if LABELS[code] in static_errors:
-            messages.append(f"Statik okuma: {static_errors[LABELS[code]]}")
-        if LABELS[code] in rendered_errors:
-            messages.append(f"Tarayıcı okuması: {rendered_errors[LABELS[code]]}")
-        errors[LABELS[code]] = " | ".join(messages) or "Borsa İstanbul verisi alınamadı."
+
+        marker = find_token(tokens, code)
+        if marker < 0:
+            continue
+
+        value: float | None = None
+        change: float | None = None
+        for token in tokens[marker + 1 : marker + 18]:
+            normalized = normalized_text(token)
+            if any(other != code and other in normalized for other in BIST_URLS):
+                break
+            if code in normalized or "BIST" in normalized or "ENDEKS" in normalized:
+                continue
+
+            if value is None:
+                candidates = values_in_text(token, VALUE_BOUNDS[code])
+                if candidates:
+                    value = candidates[0]
+                    continue
+
+            candidates = values_in_text(token, (-100.0, 100.0))
+            if candidates:
+                change = candidates[0]
+                break
+
+        if value is not None:
+            result[code] = build_item(code, value, change)
+
+    return result
+
+
+def fetch_bist() -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Fetch the Bloomberg HT Borsa page once and extract the three indices."""
+
+    try:
+        raw, content_type = request_bytes(
+            BLOOMBERGHT_BORSA_URL,
+            accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+        )
+        result = parse_bloomberght_bist(decode_html(raw, content_type))
+    except Exception as exc:
+        message = f"Bloomberg HT Borsa sayfası okunamadı: {exc}"
+        return {}, {LABELS[code]: message for code in BIST_URLS}
+
+    errors: dict[str, str] = {}
+    for code in BIST_URLS:
+        if code not in result:
+            errors[LABELS[code]] = (
+                f"{LABELS[code]} değeri Bloomberg HT Borsa tablosunda bulunamadı."
+            )
     return result, errors
 
 
@@ -1054,11 +1147,11 @@ def sync_economy(db) -> None:
     snapshot = {
         "items": final_items,
         "lastUpdated": now_iso(),
-        "source": "ALTINKAYNAK_BORSAISTANBUL",
-        "sourceLabel": "Altınkaynak • Borsa İstanbul (BIST en az 15 dk gecikmeli)",
+        "source": "ALTINKAYNAK_BLOOMBERGHT",
+        "sourceLabel": "Altınkaynak • Bloomberg HT / Foreks",
         "sourceUrls": {
             "altinkaynak": "https://www.altinkaynak.com/canli-kurlar/",
-            "borsaIstanbul": "https://www.borsaistanbul.com/",
+            "bloombergHT": BLOOMBERGHT_BORSA_URL,
         },
         "partial": bool(source_errors or stale_codes),
         "staleCodes": stale_codes,
