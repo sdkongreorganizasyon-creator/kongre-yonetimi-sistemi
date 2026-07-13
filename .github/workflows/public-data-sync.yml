@@ -2,8 +2,7 @@ name: EVENTIX Market Data Sync
 
 on:
   schedule:
-    # Borsa İstanbul halka açık verileri en az 15 dakika gecikmeli olduğundan
-    # veriler 15 dakikada bir kontrol edilir.
+    # Bloomberg HT Borsa sayfası 15 dakikada bir kontrol edilir.
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
@@ -37,7 +36,7 @@ jobs:
             python -m playwright install --with-deps chromium
           fi
 
-      - name: Sync Altinkaynak and Borsa Istanbul data to Firestore
+      - name: Sync Altinkaynak and Bloomberg HT data to Firestore
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: python automation/sync_public_data.py
