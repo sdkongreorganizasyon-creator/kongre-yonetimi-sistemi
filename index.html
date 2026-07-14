@@ -1215,6 +1215,55 @@
     }
 
 
+    /* --- Sidebar placement update: Ataturk portrait at top, EVENTIX brand at bottom --- */
+    .side-top-portrait{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 auto;
+      height:auto;
+      padding:0 6px 8px;
+      border-bottom:1px solid var(--line);
+      overflow:hidden;
+    }
+    .side-top-portrait img{
+      display:block;
+      width:auto;
+      height:3cm;
+      max-width:100%;
+      object-fit:contain;
+    }
+    .sidebar > .nav{
+      flex:1 1 auto;
+      min-height:0;
+    }
+    .side-brand.side-bottom-brand{
+      margin-top:auto;
+      flex:0 0 auto;
+      justify-content:center;
+      padding:10px 6px 4px;
+      border-top:1px solid var(--line);
+      border-bottom:0;
+    }
+    .side-brand.side-bottom-brand > div:last-child{
+      min-width:0;
+    }
+    @media (max-width:768px){
+      .side-top-portrait{
+        height:auto!important;
+        padding:0 5px 7px!important;
+      }
+      .side-top-portrait img{
+        height:3cm!important;
+      }
+      .side-brand.side-bottom-brand{
+        margin-top:auto!important;
+        padding:8px 5px 2px!important;
+        justify-content:center!important;
+      }
+    }
+
+
   </style>
 </head>
 <body>
@@ -1244,9 +1293,10 @@
 
   <section id="appPage" class="app hidden">
     <aside id="mobileSidebar" class="sidebar">
-      <div class="side-brand"><div class="logo-mark logo-image"><img src="logo.jpg" alt="SD Kongre Organizasyon Hizmetleri"></div><div><strong>EVENTIX</strong><span>SÜREÇ YÖNETİMİ SİSTEMİ</span></div></div>
+      <div class="side-top-portrait"><img src="ataturk.png" alt="Mustafa Kemal Atatürk"></div>
       <nav id="nav" class="nav"></nav>
-       <div class="side-footer"><strong id="sideUserName">-</strong><span id="sideUserRole">-</span></div>
+      <div class="side-brand side-bottom-brand"><div class="logo-mark logo-image"><img src="logo.jpg" alt="SD Kongre Organizasyon Hizmetleri"></div><div><strong>EVENTIX</strong><span>SÜREÇ YÖNETİMİ SİSTEMİ</span></div></div>
+      <div class="side-footer"><strong id="sideUserName">-</strong><span id="sideUserRole">-</span></div>
     </aside>
 
     <button
