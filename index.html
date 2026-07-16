@@ -1345,7 +1345,7 @@
     const DATA_LIST_KEYS = ["organizations","crm","offers","tenders","contracts","budgets","officeExpenses","invoices","suppliers","equipment","travel","risks","documents","checklists","postEvents","communications","notifications","logs"];
     const SHARED_COLLECTION = "system_shared_records";
     const SETTINGS_RECORD_ID = "singleton";
-    const state = { currentUser:null, viewKey:"dashboard", activeModule:"organizations", editId:null, calendarMonth:new Date(), publicData:null, publicDataHash:"", publicDataTimer:null, publicDataResponseId:"", seedComplete:false, usersNeedsBootstrap:false, usersBootstrapRequested:false, usersDataHash:"", usersResponseId:"", firebaseWebConfig:null, firebaseClientReady:false, firebaseAuth:null, firebaseDb:null, firebaseStorage:null, firebaseUser:null, firebaseAuthResponseId:"", firebaseAuthRequestId:"", realtimeUnsubscribe:null, realtimeReady:false, realtimeStarting:false, migrationInProgress:false, migrationChecked:false, remoteDocIds:new Set(), sharedData:{}, sharedSettings:{aiPrompts:{}}, pendingLogs:[] };
+    const state = { currentUser:null, viewKey:"dashboard", activeModule:"organizations", editId:null, calendarMonth:new Date(), publicData:null, publicDataHash:"", publicDataTimer:null, publicDataResponseId:"", seedComplete:false, usersNeedsBootstrap:false, usersBootstrapRequested:false, usersDataHash:"", usersResponseId:"", firebaseWebConfig:null, firebaseClientReady:false, firebaseAuth:null, firebaseDb:null, firebaseStorage:null, firebaseUser:null, firebaseAuthResponseId:"", firebaseAuthRequestId:"", realtimeUnsubscribe:null, realtimeReady:false, realtimeStarting:false, realtimeFirstSnapshot:false, migrationInProgress:false, migrationChecked:false, sessionResumeInProgress:false, appActivated:false, remoteDocIds:new Set(), sharedData:{}, sharedSettings:{aiPrompts:{}}, pendingLogs:[] };
     const AI_PENDING_KEY = "kys_ai_pending_v3";
     const USERS_RESPONSE_KEY = "kys_users_response_v3";
     const FIREBASE_AUTH_RESPONSE_KEY = "kys_firebase_auth_response_v3";
@@ -1410,7 +1410,9 @@
       else toast(`Kullanıcılar Firebase'e kaydedilemedi: ${response.error||"Bilinmeyen hata"}`);
     }
     function emptySharedData(){return Object.fromEntries(DATA_LIST_KEYS.map(key=>[key,[]]));}
-    function rawList(key){return state.realtimeReady ? (state.sharedData[key]||[]) : store.get(KEYS[key],[]);}
+    // Giriş yapıldıktan sonra ekranların tek veri kaynağı ortak Firestore koleksiyonudur.
+    // localStorage yalnızca ilk ve tek seferlik eski veri aktarımı için okunur.
+    function rawList(key){return state.currentUser ? (state.sharedData[key]||[]) : store.get(KEYS[key],[]);}
     function getList(key){return rawList(key).filter(x=>!x.isDeleted && !(key==="tenders" && x.source==="AUTO_EKAP"));}
     function uid(){return "id_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7)}
     function recordDocId(key,id){return `${key}__${id}`.replaceAll("/","_");}
@@ -1467,7 +1469,7 @@
       for(const entry of pending){try{await persistSharedRecord("logs",entry);}catch{state.pendingLogs.push(entry);}}
     }
     async function migrateLegacyData(remoteIds){
-      if(state.migrationInProgress||state.currentUser?.role!=="admin")return;
+      if(state.migrationInProgress||!state.currentUser)return;
       state.migrationInProgress=true;
       let migrated=0;
       try{
@@ -1476,14 +1478,22 @@
           for(const row of localRows){
             if(!row?.id||remoteIds.has(recordDocId(key,row.id)))continue;
             const ownerId=resolveLegacyOwnerId(row);
+            // Süper Admin tüm eski kayıtları; diğer kullanıcılar yalnızca sahibi
+            // oldukları eski kayıtları ortak koleksiyona aktarabilir.
+            if(state.currentUser.role!=="admin"&&ownerId!==state.currentUser.id)continue;
             const normalized={...row,ownerId,createdById:row.createdById||ownerId,createdBy:row.createdBy||state.currentUser.fullName,updatedAt:row.updatedAt||dateTime(),updatedBy:row.updatedBy||state.currentUser.fullName};
             await persistSharedRecord(key,normalized,{migration:true});
             migrated++;
           }
         }
-        const localSettings=store.get(KEYS.settings,{});
-        if(localSettings&&!Array.isArray(localSettings)&&Object.keys(localSettings).length&&!remoteIds.has(recordDocId("settings",SETTINGS_RECORD_ID))){await persistSettings(localSettings);migrated++;}
-        [...DATA_LIST_KEYS,"settings"].forEach(key=>localStorage.removeItem(KEYS[key]));
+        if(state.currentUser.role==="admin"){
+          const localSettings=store.get(KEYS.settings,{});
+          if(localSettings&&!Array.isArray(localSettings)&&Object.keys(localSettings).length&&!remoteIds.has(recordDocId("settings",SETTINGS_RECORD_ID))){await persistSettings(localSettings);migrated++;}
+          // Sadece Süper Admin tam aktarımı tamamladıktan sonra eski yerel iş
+          // verisi temizlenir. Diğer kullanıcılarda yerel veri yedek olarak kalır
+          // fakat ekranlarda hiçbir zaman veri kaynağı olarak kullanılmaz.
+          [...DATA_LIST_KEYS,"settings"].forEach(key=>localStorage.removeItem(KEYS[key]));
+        }
         if(migrated)toast(`${migrated} mevcut kayıt silinmeden Firebase'e aktarıldı.`);
       }catch(err){toast(`Mevcut veriler aktarılırken hata oluştu: ${err.message||err}`);}
       finally{state.migrationInProgress=false;}
@@ -1497,6 +1507,12 @@
       else if(state.viewKey==="profitability")showProfitability();
       else if(state.viewKey==="officeExpenseReports")renderOfficeExpenseReport();
       else if(state.viewKey==="notifications"&&changedModules.has("logs"))showNotifications();
+    }
+    function activateAppAfterRealtime(){
+      if(!state.currentUser||!state.realtimeReady||state.appActivated)return;
+      state.appActivated=true;
+      showApp();
+      if(!restorePendingAiView())showDashboard();
     }
     async function startRealtimeData(){
       if(state.realtimeStarting||state.realtimeUnsubscribe||!state.firebaseDb||!state.firebaseAuth?.currentUser||!state.currentUser)return;
@@ -1521,12 +1537,46 @@
           state.sharedData=next;state.sharedSettings=nextSettings;state.remoteDocIds=remoteIds;state.realtimeReady=true;
           if(!state.migrationChecked&&!snapshot.metadata.fromCache){state.migrationChecked=true;await migrateLegacyData(remoteIds);}
           await flushPendingLogs();
+          if(!state.realtimeFirstSnapshot){state.realtimeFirstSnapshot=true;activateAppAfterRealtime();}
           refreshRealtimeView(changed);
-        },err=>{toast(`Gerçek zamanlı veri bağlantısı kesildi: ${err.message||err}`);});
+        },err=>{
+          state.realtimeReady=false;
+          state.realtimeFirstSnapshot=false;
+          state.realtimeUnsubscribe=null;
+          toast(`Ortak Firestore bağlantısı kurulamadı: ${err.message||err}`);
+          if(state.currentUser)setTimeout(logout,0);
+        });
       }finally{state.realtimeStarting=false;}
     }
+    function normalizeFirebaseConfig(config){
+      if(!config||typeof config!=="object")return null;
+      const normalized={};
+      ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId","measurementId"].forEach(key=>{
+        if(config[key]!==undefined&&config[key]!==null)normalized[key]=String(config[key]).trim();
+      });
+      return normalized.apiKey&&normalized.authDomain&&normalized.projectId&&normalized.appId?normalized:null;
+    }
+    async function resumeStoredFirebaseSession(firebaseUser){
+      if(!firebaseUser||state.sessionResumeInProgress||state.firebaseAuthRequestId)return;
+      const session=store.get(KEYS.session,null);
+      const localUser=session?.userId?getUsers().find(u=>u.id===session.userId&&u.active):null;
+      if(!localUser)return;
+      state.sessionResumeInProgress=true;
+      try{
+        const tokenResult=await firebaseUser.getIdTokenResult();
+        if(String(tokenResult.claims?.appUserId||"")!==String(localUser.id))throw new Error("Firebase oturumu ile uygulama kullanıcısı eşleşmiyor.");
+        state.currentUser=localUser;
+        bootstrapUsersIfNeeded();
+        await startRealtimeData();
+      }catch(err){
+        toast(err.message||"Oturum yeniden başlatılamadı. Lütfen tekrar giriş yapın.");
+        await state.firebaseAuth?.signOut().catch(()=>{});
+        logout();
+      }finally{state.sessionResumeInProgress=false;}
+    }
     async function configureFirebaseClient(config){
-      if(config&&typeof config==="object"&&Object.keys(config).length)state.firebaseWebConfig=config;
+      const normalized=normalizeFirebaseConfig(config);
+      if(normalized)state.firebaseWebConfig=normalized;
       if(state.firebaseClientReady||!state.firebaseWebConfig)return;
       if(!window.firebase){toast("Firebase istemci kütüphanesi yüklenemedi.");return;}
       try{
@@ -1534,7 +1584,11 @@
         state.firebaseAuth=app.auth();state.firebaseDb=app.firestore();state.firebaseStorage=app.storage();
         await state.firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
         state.firebaseClientReady=true;
-        state.firebaseAuth.onAuthStateChanged(user=>{state.firebaseUser=user;if(user&&state.currentUser)void startRealtimeData();else if(!user&&state.currentUser&&!state.firebaseAuthRequestId)logout();});
+        state.firebaseAuth.onAuthStateChanged(user=>{
+          state.firebaseUser=user;
+          if(user){void resumeStoredFirebaseSession(user);}
+          else if(state.currentUser&&!state.firebaseAuthRequestId){logout();}
+        });
       }catch(err){toast(`Firebase istemci ayarı yapılamadı: ${err.message||err}`);}
     }
     function requestFirebaseAuth(user,password){
@@ -1548,25 +1602,24 @@
     async function handleFirebaseAuthResponse(response){
       if(!response?.requestId||response.requestId===state.firebaseAuthResponseId||store.get(FIREBASE_AUTH_RESPONSE_KEY,"")===response.requestId)return;
       state.firebaseAuthResponseId=response.requestId;store.set(FIREBASE_AUTH_RESPONSE_KEY,response.requestId);
-      if(!response.ok){toast(response.error||"Firebase oturumu açılamadı.");logout();return;}
+      if(!response.ok){state.firebaseAuthRequestId="";toast(response.error||"Firebase oturumu açılamadı.");logout();return;}
       await configureFirebaseClient(state.firebaseWebConfig);
-      if(!state.firebaseAuth){toast("Firebase Authentication hazır değil.");logout();return;}
+      if(!state.firebaseAuth){state.firebaseAuthRequestId="";toast("Firebase Authentication hazır değil.");logout();return;}
       try{
+        state.currentUser={...(state.currentUser||{}),...(response.user||{})};
         await state.firebaseAuth.signInWithCustomToken(response.token);
         state.firebaseAuthRequestId="";
-        state.currentUser={...(state.currentUser||{}),...(response.user||{})};
         store.set(KEYS.session,{userId:state.currentUser.id});
         log("login","Sistem",state.currentUser.username);
-        showApp();showDashboard();
         await startRealtimeData();
-      }catch(err){toast(`Firebase oturumu açılamadı: ${err.message||err}`);logout();}
+      }catch(err){state.firebaseAuthRequestId="";toast(`Firebase oturumu açılamadı: ${err.message||err}`);logout();}
     }
     const STATUS = ["Teklif Aşaması","Planlama","Hazırlık","Aktif","Tamamlandı","İptal Edildi"];
     const PRIORITIES = ["Düşük","Normal","Yüksek","Acil"];
     const USERS_SELECT = () => getUsers().filter(u=>u.active).map(u=>u.fullName);
     const EQUIPMENT_OPTIONS = ["Ses sistemi","Yaka mikrofonu","Delege mikrofonu","Masa mikrofonu","Kürsü Mikrofonu","Kürsü","LED ekranlı kürsü","Konuşmacı masası","Sahne/podyum","LED Ekran","Backdrop Sahne","Protokol Masası","Truss Spot Işığı (Followspot)","Led Par","Robot Işık (Moving Head)","Tercüme Kabini","Kulaklık","Protokol Halısı","Merdiven"];
-    function getSettings(){ const raw=state.realtimeReady?state.sharedSettings:store.get(KEYS.settings,{}); return raw && !Array.isArray(raw) && typeof raw==="object" ? raw : {aiPrompts:{}}; }
-    async function saveSettings(v){ const merged={...getSettings(),...v}; if(state.realtimeReady)await persistSettings(merged); else store.set(KEYS.settings,merged); }
+    function getSettings(){ const raw=state.currentUser?state.sharedSettings:store.get(KEYS.settings,{}); return raw && !Array.isArray(raw) && typeof raw==="object" ? raw : {aiPrompts:{}}; }
+    async function saveSettings(v){ const merged={...getSettings(),...v}; if(state.currentUser){if(!state.realtimeReady)throw new Error("Ortak Firestore bağlantısı hazır değil.");await persistSettings(merged);} else store.set(KEYS.settings,merged); }
     function aiPromptFor(key){ const s=getSettings(); return s.aiPrompts?.[key] || ""; }
     const MODULES = {
       tenders:{nav:"İhale Takip Sistemi",icon:"📡",title:"İhale Takip Sistemi",sub:"İhalelerinizi Düzenli Takip Edin, Fırsatları Kaçırmayın",prefix:"IHL",newLabel:"Yeni İhale Kaydı",search:"EKAP no, kurum, ihale adı, durum ara...",sections:[{title:"İhale Bilgileri",note:"İhale bilgileri kullanıcı tarafından Yeni Kayıt formu ile manuel olarak girilir.",fields:["ekapNo","institution","tenderName","publicationDate","deadline","estimatedCost","status","suitability","sourceUrl","description","notes"]}],fields:[["ekapNo","EKAP No","text",true],["institution","Kurum","text",true],["tenderName","İhale Adı","text",true],["publicationDate","Yayın Tarihi","date",false],["deadline","Son Başvuru Tarihi","date",false],["estimatedCost","Yaklaşık Maliyet","number",false],["status","Durum","select",false,["Yayında","Yaklaşan Son Tarih","Değerlendiriliyor","Başvuru Hazırlanıyor","Başvuruldu","Sonuçlandı","İptal Edildi"]],["suitability","Uygunluk","select",false,["Uygun","İncelenecek","Uygun Değil"]],["sourceUrl","Kaynak Bağlantısı","text",false],["description","İhale Açıklaması","textareaHalf",false],["notes","Takip Notları","textareaHalf",false]],cols:[["ekapNo","EKAP No"],["institution","Kurum"],["tenderName","İhale Adı"],["publicationDate","Yayın","date"],["deadline","Son Başvuru","date"],["estimatedCost","Yaklaşık Maliyet","money"],["suitability","Uygunluk","badge"],["status","Durum","badge"]]},
@@ -1623,8 +1676,31 @@ function navTitleStyle(title){
     function setTitle(title,sub){$("topTitle").textContent=title;$("topSub").textContent=sub||"";renderNav(); const v=$("view"); if(v) v.scrollTop=0;}
     function showApp(){ $("loginPage").classList.add("hidden"); $("appPage").classList.remove("hidden"); $("sideUserName").textContent=state.currentUser.fullName; $("sideUserRole").textContent=roleName(state.currentUser.role); $("topUserName").textContent=state.currentUser.fullName; $("topUserRole").textContent=roleName(state.currentUser.role); $("topAvatar").textContent=initials(state.currentUser.fullName); renderNav(); }
     function renderNav(){ const adminHtml=state.currentUser?.role==="admin" ? navButton(["admin","Admin","⚙","showAdmin"]) : ""; $("nav").innerHTML=groupedNavHtml()+adminHtml; }
-    async function login(e){ e.preventDefault(); const username=$("loginUsername").value.trim().toLowerCase(); const password=$("loginPassword").value; const user=getUsers().find(u=>u.username.toLowerCase()===username && u.active); if(!user){toast("Kullanıcı bulunamadı."); return;} const hash=await sha256(password); if(hash!==user.passwordHash){toast("Şifre hatalı."); return;} state.currentUser=user; store.set(KEYS.session,{userId:user.id}); bootstrapUsersIfNeeded(); showApp(); showDashboard(); requestFirebaseAuth(user,password); }
-    function logout(){ store.set(KEYS.session,null); state.firebaseAuthRequestId="";state.realtimeUnsubscribe?.();state.realtimeUnsubscribe=null;state.realtimeReady=false;state.migrationChecked=false;state.sharedData=emptySharedData();state.sharedSettings={aiPrompts:{}};state.firebaseAuth?.signOut().catch(()=>{});state.currentUser=null; $("appPage").classList.add("hidden"); $("loginPage").classList.remove("hidden"); }
+    async function login(e){
+      e.preventDefault();
+      if(state.firebaseAuthRequestId)return;
+      const username=$("loginUsername").value.trim().toLowerCase();
+      const password=$("loginPassword").value;
+      const user=getUsers().find(u=>u.username.toLowerCase()===username&&u.active);
+      if(!user){toast("Kullanıcı bulunamadı.");return;}
+      const hash=await sha256(password);
+      if(hash!==user.passwordHash){toast("Şifre hatalı.");return;}
+      state.currentUser=user;
+      bootstrapUsersIfNeeded();
+      if(!requestFirebaseAuth(user,password)){state.currentUser=null;return;}
+      toast("Ortak iş veritabanına bağlanılıyor...");
+    }
+    function logout(){
+      store.set(KEYS.session,null);
+      state.firebaseAuthRequestId="";
+      state.realtimeUnsubscribe?.();state.realtimeUnsubscribe=null;
+      state.realtimeReady=false;state.realtimeFirstSnapshot=false;state.realtimeStarting=false;
+      state.migrationChecked=false;state.sessionResumeInProgress=false;state.appActivated=false;
+      state.sharedData=emptySharedData();state.sharedSettings={aiPrompts:{}};
+      state.firebaseAuth?.signOut().catch(()=>{});
+      state.currentUser=null;
+      $("appPage").classList.add("hidden");$("loginPage").classList.remove("hidden");
+    }
     function canEdit(){return state.currentUser?.role!=="readonly"} function canDelete(row){return canManageRecord(row)}
     function money(v){return Number(v||0).toLocaleString("tr-TR",{maximumFractionDigits:0})+" ₺"}
     function currencyMoney(v,currency="TRY"){ const code=String(currency||"TRY").toUpperCase(); const symbol={TRY:"₺",USD:"$",EUR:"€",GBP:"£"}[code]||code; return Number(v||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+" "+symbol; }
@@ -2074,20 +2150,12 @@ function navTitleStyle(title){
         );
 
         if (user) {
+          // Ekranı yerel oturumla açma. Firebase Auth oturumu doğrulandıktan ve
+          // ortak koleksiyonun ilk gerçek zamanlı görüntüsü geldikten sonra aç.
           state.currentUser = user;
           bootstrapUsersIfNeeded();
-
-          showApp();
-          if(state.firebaseAuth?.currentUser)void startRealtimeData();
-
-          if (!restorePendingAiView()) {
-            showDashboard();
-          }
-
-          handleStreamlitArgs(
-            window.__latestStreamlitArgs || {}
-          );
-
+          handleStreamlitArgs(window.__latestStreamlitArgs || {});
+          if(state.firebaseAuth?.currentUser)void resumeStoredFirebaseSession(state.firebaseAuth.currentUser);
           return;
         }
       }
