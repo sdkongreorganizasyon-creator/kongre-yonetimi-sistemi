@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function appUserId() {
+      return request.auth.token.appUserId;
+    }
+
+    function validModule(moduleName) {
+      return moduleName in [
+        "organizations", "crm", "offers", "tenders", "contracts",
+        "budgets", "officeExpenses", "invoices", "suppliers",
+        "equipment", "travel", "risks", "documents", "checklists",
+        "postEvents", "communications", "notifications", "logs", "settings"
+      ];
+    }
+
+    match /system_shared_records/{recordId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId is string
+        && request.resource.data.module is string
+        && request.resource.data.recordId is string
+        && request.resource.data.payload is map
+        && validModule(request.resource.data.module)
+        && request.resource.data.payload.ownerId == request.resource.data.ownerId
+        && request.resource.data.payload.id == request.resource.data.recordId
+        && (isAdmin() || request.resource.data.ownerId == appUserId())
+        && (request.resource.data.module != "settings" || isAdmin());
+
+      allow update: if signedIn()
+        && (isAdmin() || resource.data.ownerId == appUserId())
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.module == resource.data.module
+        && request.resource.data.recordId == resource.data.recordId
+        && request.resource.data.payload is map
+        && request.resource.data.payload.ownerId == resource.data.ownerId
+        && request.resource.data.payload.id == resource.data.recordId
+        && validModule(request.resource.data.module)
+        && (request.resource.data.module != "settings" || isAdmin())
+        && (request.resource.data.module != "logs" || isAdmin());
+
+      // Uygulama fiziksel silme yerine isDeleted alanıyla güvenli silme yapar.
+      allow delete: if false;
+    }
+
+    // Kullanıcı listesi yalnızca Streamlit sunucusundaki Admin SDK tarafından okunur/yazılır.
+    match /system_private/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Mevcut ekonomi paneli herkese açık okunabilir; istemciden değiştirilemez.
+    match /system_public/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
