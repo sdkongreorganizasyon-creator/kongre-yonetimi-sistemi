@@ -1,6 +1,8 @@
 from pathlib import Path
 from datetime import date, datetime
+import hashlib
 import json
+import re
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -12,9 +14,10 @@ except Exception:  # The app should still open if the dependency is missing.
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import auth, credentials, firestore
 except Exception:  # Existing localStorage modules must continue to work without Firebase.
     firebase_admin = None
+    auth = None
     credentials = None
     firestore = None
 
@@ -116,6 +119,31 @@ def _secret(name: str, default: str = "") -> str:
 def _secret_bool(name: str, default: bool = False) -> bool:
     raw = _secret(name, "true" if default else "false").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+def _firebase_web_config() -> dict:
+    raw = _secret("FIREBASE_WEB_CONFIG")
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _verify_firebase_id_token(id_token: str) -> dict:
+    if auth is None:
+        raise RuntimeError("Firebase Authentication kullanılamıyor.")
+    if not id_token:
+        raise PermissionError("Firebase oturum bilgisi bulunamadı.")
+    return auth.verify_id_token(id_token, check_revoked=True)
+
+
+def _safe_firebase_uid(user_id: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_\-.]", "_", str(user_id or ""))[:120]
+    if not cleaned:
+        raise ValueError("Geçersiz kullanıcı kimliği.")
+    return f"eventix_{cleaned}"
 
 
 @st.cache_resource
@@ -245,8 +273,15 @@ def _handle_users_persist(value: dict) -> None:
                 "FIREBASE_ENABLED ve FIREBASE_SERVICE_ACCOUNT_JSON ayarlarını kontrol edin."
             )
 
+        users_ref = client.collection("system_private").document("users")
+        existing = users_ref.get()
+        if existing.exists:
+            decoded = _verify_firebase_id_token(str(value.get("idToken") or ""))
+            if not bool(decoded.get("admin")):
+                raise PermissionError("Kullanıcı yönetimi yalnızca Süper Admin tarafından yapılabilir.")
+
         users = _validate_users(value.get("users"))
-        client.collection("system_private").document("users").set(
+        users_ref.set(
             {
                 "users": users,
                 "updatedAt": firestore.SERVER_TIMESTAMP,
@@ -266,6 +301,85 @@ def _handle_users_persist(value: dict) -> None:
     processed.append(request_id)
     st.session_state["processed_users_request_ids"] = processed[-50:]
     st.session_state["users_response"] = response
+    st.rerun()
+
+
+def _handle_firebase_auth_request(value: dict) -> None:
+    request_id = str(value.get("requestId") or "")
+    if not request_id:
+        return
+
+    processed = st.session_state.setdefault("processed_firebase_auth_request_ids", [])
+    if request_id in processed:
+        return
+
+    response = {"requestId": request_id, "ok": False}
+    try:
+        client = _firestore_client()
+        if client is None or auth is None:
+            raise RuntimeError(
+                "Firebase bağlantısı etkin değil. Streamlit Secrets içindeki "
+                "FIREBASE_ENABLED, FIREBASE_SERVICE_ACCOUNT_JSON ve FIREBASE_WEB_CONFIG ayarlarını kontrol edin."
+            )
+
+        username = str(value.get("username") or "").strip().lower()
+        password = str(value.get("password") or "")
+        if not username or not password:
+            raise ValueError("Kullanıcı adı ve şifre zorunludur.")
+
+        users_doc = client.collection("system_private").document("users").get()
+        payload = users_doc.to_dict() or {} if users_doc.exists else {}
+        users = payload.get("users", [])
+        password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        user = next(
+            (
+                item
+                for item in users
+                if isinstance(item, dict)
+                and str(item.get("username") or "").strip().lower() == username
+                and bool(item.get("active", True))
+                and str(item.get("passwordHash") or "") == password_hash
+            ),
+            None,
+        )
+        if user is None:
+            raise PermissionError("Kullanıcı adı veya şifre hatalı.")
+
+        user_id = str(user.get("id") or "").strip()
+        role = str(user.get("role") or "staff").strip()
+        claims = {
+            "appUserId": user_id,
+            "role": role,
+            "admin": role == "admin",
+            "username": username,
+        }
+        token = auth.create_custom_token(_safe_firebase_uid(user_id), claims)
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+
+        response.update(
+            {
+                "ok": True,
+                "token": token,
+                "user": {
+                    "id": user_id,
+                    "username": username,
+                    "fullName": str(user.get("fullName") or ""),
+                    "role": role,
+                    "title": str(user.get("title") or ""),
+                    "department": str(user.get("department") or ""),
+                    "email": str(user.get("email") or ""),
+                    "phone": str(user.get("phone") or ""),
+                    "active": True,
+                },
+            }
+        )
+    except Exception as exc:
+        response["error"] = str(exc)
+
+    processed.append(request_id)
+    st.session_state["processed_firebase_auth_request_ids"] = processed[-50:]
+    st.session_state["firebase_auth_response"] = response
     st.rerun()
 
 
@@ -424,6 +538,10 @@ def _handle_component_value(value: object) -> None:
     if not isinstance(value, dict):
         return
 
+    if value.get("type") == "firebase_auth_request":
+        _handle_firebase_auth_request(value)
+        return
+
     if value.get("type") == "users_persist":
         _handle_users_persist(value)
         return
@@ -485,6 +603,8 @@ component_value = kongre_component(
     public_data_response=st.session_state.get("public_data_response"),
     users_data=_users_snapshot(),
     users_response=st.session_state.get("users_response"),
+    firebase_web_config=_firebase_web_config(),
+    firebase_auth_response=st.session_state.get("firebase_auth_response"),
 )
 _handle_component_value(component_value)
 
