@@ -145,6 +145,130 @@ def _json_safe(value):
     return value
 
 
+@st.cache_data(ttl=10, show_spinner=False)
+def _users_snapshot() -> dict:
+    empty = {
+        "firebaseEnabled": False,
+        "exists": False,
+        "users": [],
+    }
+
+    try:
+        client = _firestore_client()
+        if client is None:
+            return empty
+
+        users_doc = client.collection("system_private").document("users").get()
+        payload = users_doc.to_dict() or {} if users_doc.exists else {}
+        users = payload.get("users", [])
+        if not isinstance(users, list):
+            users = []
+
+        return {
+            "firebaseEnabled": True,
+            "exists": users_doc.exists,
+            "users": _json_safe(users),
+            "updatedAt": _json_safe(payload.get("updatedAt")),
+        }
+    except Exception as exc:
+        empty["error"] = str(exc)
+        return empty
+
+
+def _validate_users(users: object) -> list[dict]:
+    if not isinstance(users, list) or not users:
+        raise ValueError("Kullanıcı listesi boş olamaz.")
+
+    normalized = []
+    seen_ids = set()
+    seen_usernames = set()
+    allowed_roles = {"admin", "manager", "staff", "readonly"}
+
+    for item in users:
+        if not isinstance(item, dict):
+            raise ValueError("Geçersiz kullanıcı kaydı bulundu.")
+
+        user_id = str(item.get("id") or "").strip()
+        username = str(item.get("username") or "").strip().lower()
+        password_hash = str(item.get("passwordHash") or "").strip()
+        role = str(item.get("role") or "staff").strip()
+
+        if not user_id or not username or not password_hash:
+            raise ValueError("Kullanıcı kimliği, kullanıcı adı ve şifre özeti zorunludur.")
+        if user_id in seen_ids or username in seen_usernames:
+            raise ValueError("Tekrarlanan kullanıcı kimliği veya kullanıcı adı bulundu.")
+        if role not in allowed_roles:
+            raise ValueError("Geçersiz kullanıcı rolü bulundu.")
+
+        normalized.append(
+            {
+                "id": user_id,
+                "username": username,
+                "fullName": str(item.get("fullName") or "").strip(),
+                "role": role,
+                "title": str(item.get("title") or ""),
+                "department": str(item.get("department") or ""),
+                "email": str(item.get("email") or ""),
+                "phone": str(item.get("phone") or ""),
+                "active": bool(item.get("active", True)),
+                "passwordHash": password_hash,
+            }
+        )
+        seen_ids.add(user_id)
+        seen_usernames.add(username)
+
+    if not any(user["role"] == "admin" and user["active"] for user in normalized):
+        raise ValueError("En az bir aktif Süper Admin kullanıcısı bulunmalıdır.")
+
+    return normalized
+
+
+def _handle_users_persist(value: dict) -> None:
+    request_id = str(value.get("requestId") or "")
+    if not request_id:
+        return
+
+    processed = st.session_state.setdefault("processed_users_request_ids", [])
+    if request_id in processed:
+        return
+
+    response = {
+        "requestId": request_id,
+        "ok": False,
+    }
+
+    try:
+        client = _firestore_client()
+        if client is None:
+            raise RuntimeError(
+                "Firebase bağlantısı etkin değil. Streamlit Secrets içindeki "
+                "FIREBASE_ENABLED ve FIREBASE_SERVICE_ACCOUNT_JSON ayarlarını kontrol edin."
+            )
+
+        users = _validate_users(value.get("users"))
+        client.collection("system_private").document("users").set(
+            {
+                "users": users,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+        _users_snapshot.clear()
+        response.update(
+            {
+                "ok": True,
+                "message": "Kullanıcı bilgileri Firebase'e kalıcı olarak kaydedildi.",
+            }
+        )
+    except Exception as exc:
+        response["error"] = str(exc)
+
+    processed.append(request_id)
+    st.session_state["processed_users_request_ids"] = processed[-50:]
+    st.session_state["users_response"] = response
+    st.rerun()
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _public_data_snapshot() -> dict:
     empty = {
@@ -300,6 +424,10 @@ def _handle_component_value(value: object) -> None:
     if not isinstance(value, dict):
         return
 
+    if value.get("type") == "users_persist":
+        _handle_users_persist(value)
+        return
+
     if value.get("type") == "public_data_refresh":
         _handle_public_data_refresh(value)
         return
@@ -355,6 +483,8 @@ component_value = kongre_component(
     ai_response=st.session_state.get("ai_response"),
     public_data=_public_data_snapshot(),
     public_data_response=st.session_state.get("public_data_response"),
+    users_data=_users_snapshot(),
+    users_response=st.session_state.get("users_response"),
 )
 _handle_component_value(component_value)
 
