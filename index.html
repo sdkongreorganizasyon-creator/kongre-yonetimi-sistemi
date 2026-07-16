@@ -1338,8 +1338,9 @@
   const App = (() => {
     const KEYS = { users:"kys_users_v3", session:"kys_session_v3", organizations:"kys_organizations_v3", crm:"kys_crm_v3", offers:"kys_offers_v3", tenders:"kys_tenders_v3", economy:"kys_economy_v3", contracts:"kys_contracts_v3", budgets:"kys_budgets_v3", officeExpenses:"kys_office_expenses_v3", invoices:"kys_invoices_v3", suppliers:"kys_suppliers_v3", equipment:"kys_equipment_v3", travel:"kys_travel_v3", risks:"kys_risks_v3", documents:"kys_documents_v3", checklists:"kys_checklists_v3", postEvents:"kys_post_events_v3", communications:"kys_communications_v3", notifications:"kys_notifications_v3", logs:"kys_logs_v3", settings:"kys_settings_v3" };
     const DEFAULT_PASSWORD = "Turkak2026!";
-    const state = { currentUser:null, viewKey:"dashboard", activeModule:"organizations", editId:null, calendarMonth:new Date(), publicData:null, publicDataHash:"", publicDataTimer:null, publicDataResponseId:"" };
+    const state = { currentUser:null, viewKey:"dashboard", activeModule:"organizations", editId:null, calendarMonth:new Date(), publicData:null, publicDataHash:"", publicDataTimer:null, publicDataResponseId:"", seedComplete:false, usersNeedsBootstrap:false, usersBootstrapRequested:false, usersDataHash:"", usersResponseId:"" };
     const AI_PENDING_KEY = "kys_ai_pending_v3";
+    const USERS_RESPONSE_KEY = "kys_users_response_v3";
     const $ = id => document.getElementById(id);
     const store = { get(k,f){ try{return JSON.parse(localStorage.getItem(k)) ?? f}catch{return f} }, set(k,v){ localStorage.setItem(k, JSON.stringify(v)); } };
     const today = () => toISO(new Date());
@@ -1355,7 +1356,45 @@
     function defaultUsers(passwordHash){return [{id:"u_admin",username:"admin",fullName:"Admin",role:"admin",title:"Sistem Yöneticisi",department:"Yönetim",email:"",phone:"",active:true,passwordHash},{id:"u_manager",username:"yonetici",fullName:"Firma Yöneticisi",role:"manager",title:"Firma Yöneticisi",department:"Operasyon",email:"",phone:"",active:true,passwordHash},{id:"u_ops",username:"operasyon",fullName:"Operasyon Kullanıcısı",role:"staff",title:"Operasyon",department:"Operasyon",email:"",phone:"",active:true,passwordHash}];}
     function roleName(role){return {admin:"Süper Admin",manager:"Firma Yöneticisi",staff:"Kullanıcı",readonly:"Salt Okunur"}[role]||role}
     async function seed(){ if(!store.get(KEYS.users,[]).length) store.set(KEYS.users, defaultUsers(await sha256(DEFAULT_PASSWORD))); Object.values(KEYS).forEach(k=>{ if(!localStorage.getItem(k) && ![KEYS.users,KEYS.session].includes(k)) store.set(k,[]); }); }
-    function getUsers(){return store.get(KEYS.users,[])} function saveUsers(v){store.set(KEYS.users,v)}
+    function getUsers(){return store.get(KEYS.users,[])}
+    function requestUsersPersist(users){
+      const S=streamlitApi();
+      if(!S||typeof S.setComponentValue!=="function"){toast("Kullanıcılar Firebase'e kaydedilemedi: Streamlit bağlantısı bulunamadı.");return false;}
+      const requestId=`users_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+      S.setComponentValue({type:"users_persist",requestId,requestedAt:dateTime(),users});
+      return true;
+    }
+    function saveUsers(v){store.set(KEYS.users,v);requestUsersPersist(v)}
+    function bootstrapUsersIfNeeded(){
+      if(!state.seedComplete||!state.usersNeedsBootstrap||state.usersBootstrapRequested||state.currentUser?.role!=="admin")return;
+      const users=getUsers();
+      if(!users.length)return;
+      state.usersBootstrapRequested=true;
+      requestUsersPersist(users);
+    }
+    function syncUsersFromBackend(payload){
+      if(!payload||!payload.firebaseEnabled)return;
+      if(payload.exists&&Array.isArray(payload.users)&&payload.users.length){
+        const remoteHash=JSON.stringify(payload.users);
+        state.usersDataHash=remoteHash;
+        if(JSON.stringify(getUsers())!==remoteHash)store.set(KEYS.users,payload.users);
+        if(state.currentUser){
+          const refreshed=payload.users.find(u=>u.id===state.currentUser.id&&u.active);
+          if(refreshed)state.currentUser=refreshed;
+          else logout();
+        }
+        state.usersNeedsBootstrap=false;
+        return;
+      }
+      if(!payload.exists||!Array.isArray(payload.users)||!payload.users.length){state.usersNeedsBootstrap=true;bootstrapUsersIfNeeded();}
+    }
+    function handleUsersResponse(response){
+      if(!response?.requestId||response.requestId===state.usersResponseId||store.get(USERS_RESPONSE_KEY,"")===response.requestId)return;
+      state.usersResponseId=response.requestId;
+      store.set(USERS_RESPONSE_KEY,response.requestId);
+      if(response.ok){if(response.message)toast(response.message);}
+      else toast(`Kullanıcılar Firebase'e kaydedilemedi: ${response.error||"Bilinmeyen hata"}`);
+    }
     function getList(key){return store.get(KEYS[key],[]).filter(x=>!x.isDeleted && !(key==="tenders" && x.source==="AUTO_EKAP"))} function saveList(key, rows){store.set(KEYS[key], rows)}
     function log(action,module,record){ const logs=store.get(KEYS.logs,[]); logs.unshift({id:uid(),time:dateTime(),user:state.currentUser?.fullName||"-",action,module,record}); store.set(KEYS.logs,logs.slice(0,500)); }
     function uid(){return "id_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7)}
@@ -1422,7 +1461,7 @@ function navTitleStyle(title){
     function setTitle(title,sub){$("topTitle").textContent=title;$("topSub").textContent=sub||"";renderNav(); const v=$("view"); if(v) v.scrollTop=0;}
     function showApp(){ $("loginPage").classList.add("hidden"); $("appPage").classList.remove("hidden"); $("sideUserName").textContent=state.currentUser.fullName; $("sideUserRole").textContent=roleName(state.currentUser.role); $("topUserName").textContent=state.currentUser.fullName; $("topUserRole").textContent=roleName(state.currentUser.role); $("topAvatar").textContent=initials(state.currentUser.fullName); renderNav(); }
     function renderNav(){ const adminHtml=state.currentUser?.role==="admin" ? navButton(["admin","Admin","⚙","showAdmin"]) : ""; $("nav").innerHTML=groupedNavHtml()+adminHtml; }
-    async function login(e){ e.preventDefault(); const username=$("loginUsername").value.trim().toLowerCase(); const password=$("loginPassword").value; const user=getUsers().find(u=>u.username.toLowerCase()===username && u.active); if(!user){toast("Kullanıcı bulunamadı."); return;} const hash=await sha256(password); if(hash!==user.passwordHash){toast("Şifre hatalı."); return;} state.currentUser=user; store.set(KEYS.session,{userId:user.id}); log("login","Sistem",user.username); showApp(); showDashboard(); }
+    async function login(e){ e.preventDefault(); const username=$("loginUsername").value.trim().toLowerCase(); const password=$("loginPassword").value; const user=getUsers().find(u=>u.username.toLowerCase()===username && u.active); if(!user){toast("Kullanıcı bulunamadı."); return;} const hash=await sha256(password); if(hash!==user.passwordHash){toast("Şifre hatalı."); return;} state.currentUser=user; store.set(KEYS.session,{userId:user.id}); bootstrapUsersIfNeeded(); log("login","Sistem",user.username); showApp(); showDashboard(); }
     function logout(){ store.set(KEYS.session,null); state.currentUser=null; $("appPage").classList.add("hidden"); $("loginPage").classList.remove("hidden"); }
     function canEdit(){return state.currentUser?.role!=="readonly"} function canDelete(){return ["admin","manager"].includes(state.currentUser?.role)}
     function money(v){return Number(v||0).toLocaleString("tr-TR",{maximumFractionDigits:0})+" ₺"}
@@ -1640,7 +1679,7 @@ function navTitleStyle(title){
       else $(targetId).innerHTML=aiErrorHtml(result.error||"Yanıt alınamadı");
       if(pending?.requestId===result.requestId) store.set(AI_PENDING_KEY,null);
     }
-    function handleStreamlitArgs(args){ if(args?.public_data) syncPublicData(args.public_data); if(args?.ai_response) handleAiResponse(args.ai_response); const response=args?.public_data_response; if(response?.requestId&&response.requestId!==state.publicDataResponseId){state.publicDataResponseId=response.requestId;if(response.message)toast(response.message);} }
+    function handleStreamlitArgs(args){ if(args?.users_data) syncUsersFromBackend(args.users_data); if(args?.users_response) handleUsersResponse(args.users_response); if(args?.public_data) syncPublicData(args.public_data); if(args?.ai_response) handleAiResponse(args.ai_response); const response=args?.public_data_response; if(response?.requestId&&response.requestId!==state.publicDataResponseId){state.publicDataResponseId=response.requestId;if(response.message)toast(response.message);} }
     function restorePendingAiView(){
       const pending=store.get(AI_PENDING_KEY,null);
       if(!pending?.viewKey) return false;
@@ -1842,6 +1881,9 @@ function navTitleStyle(title){
       );
 
       await seed();
+      state.seedComplete=true;
+      handleStreamlitArgs(window.__latestStreamlitArgs||{});
+      bootstrapUsersIfNeeded();
       startPublicDataPolling();
 
       if (
@@ -1871,6 +1913,7 @@ function navTitleStyle(title){
 
         if (user) {
           state.currentUser = user;
+          bootstrapUsersIfNeeded();
 
           showApp();
 
