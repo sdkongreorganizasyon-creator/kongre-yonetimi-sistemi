@@ -121,14 +121,48 @@ def _secret_bool(name: str, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 def _firebase_web_config() -> dict:
+    """Return a normalized Firebase web configuration.
+
+    Streamlit Secrets values are often copied with accidental spaces around
+    JSON string values. Firebase treats those spaces as part of apiKey,
+    projectId and authDomain, which prevents the browser client from signing
+    in. Normalize only the known web configuration fields and never expose the
+    service-account credentials to the browser.
+    """
     raw = _secret("FIREBASE_WEB_CONFIG")
     if not raw:
         return {}
+
     try:
         value = json.loads(raw)
-        return value if isinstance(value, dict) else {}
     except Exception:
         return {}
+    if not isinstance(value, dict):
+        return {}
+
+    allowed_keys = (
+        "apiKey",
+        "authDomain",
+        "projectId",
+        "storageBucket",
+        "messagingSenderId",
+        "appId",
+        "measurementId",
+    )
+    normalized = {
+        key: str(value.get(key) or "").strip()
+        for key in allowed_keys
+        if value.get(key) is not None
+    }
+
+    # Backward-compatible fallbacks for existing individual Secret entries.
+    normalized["apiKey"] = normalized.get("apiKey") or _secret("FIREBASE_WEB_API_KEY").strip()
+    normalized["storageBucket"] = normalized.get("storageBucket") or _secret("FIREBASE_STORAGE_BUCKET").strip()
+
+    required = ("apiKey", "authDomain", "projectId", "appId")
+    if any(not normalized.get(key) for key in required):
+        return {}
+    return normalized
 
 
 def _verify_firebase_id_token(id_token: str) -> dict:
