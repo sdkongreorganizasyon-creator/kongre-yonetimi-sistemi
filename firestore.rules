@@ -5,7 +5,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function isSuperAdmin() {
       return signedIn() && request.auth.token.admin == true;
     }
 
@@ -22,8 +22,11 @@ service cloud.firestore {
       ];
     }
 
-    match /system_shared_records/{recordId} {
-      allow read: if signedIn();
+    // Ortak iş yönetimi koleksiyonu:
+    // Her Firebase oturumu açmış EVENTIX kullanıcısı tüm kayıtları görebilir.
+    // Kayıt yalnızca sahibi veya Süper Admin tarafından değiştirilebilir.
+    match /system_shared_records/{documentId} {
+      allow get, list: if signedIn();
 
       allow create: if signedIn()
         && request.resource.data.ownerId is string
@@ -33,11 +36,11 @@ service cloud.firestore {
         && validModule(request.resource.data.module)
         && request.resource.data.payload.ownerId == request.resource.data.ownerId
         && request.resource.data.payload.id == request.resource.data.recordId
-        && (isAdmin() || request.resource.data.ownerId == appUserId())
-        && (request.resource.data.module != "settings" || isAdmin());
+        && (isSuperAdmin() || request.resource.data.ownerId == appUserId())
+        && (request.resource.data.module != "settings" || isSuperAdmin());
 
       allow update: if signedIn()
-        && (isAdmin() || resource.data.ownerId == appUserId())
+        && (isSuperAdmin() || resource.data.ownerId == appUserId())
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.module == resource.data.module
         && request.resource.data.recordId == resource.data.recordId
@@ -45,19 +48,19 @@ service cloud.firestore {
         && request.resource.data.payload.ownerId == resource.data.ownerId
         && request.resource.data.payload.id == resource.data.recordId
         && validModule(request.resource.data.module)
-        && (request.resource.data.module != "settings" || isAdmin())
-        && (request.resource.data.module != "logs" || isAdmin());
+        && (request.resource.data.module != "settings" || isSuperAdmin())
+        && (request.resource.data.module != "logs" || isSuperAdmin());
 
-      // Uygulama fiziksel silme yerine isDeleted alanıyla güvenli silme yapar.
+      // Uygulama fiziksel silme yapmaz; isDeleted alanını güncelleyerek güvenli siler.
       allow delete: if false;
     }
 
-    // Kullanıcı listesi yalnızca Streamlit sunucusundaki Admin SDK tarafından okunur/yazılır.
+    // Kullanıcı listesi yalnızca Streamlit sunucusundaki Firebase Admin SDK ile yönetilir.
     match /system_private/{document=**} {
       allow read, write: if false;
     }
 
-    // Mevcut ekonomi paneli herkese açık okunabilir; istemciden değiştirilemez.
+    // Ekonomi paneli istemciler tarafından okunabilir, değiştirilemez.
     match /system_public/{document=**} {
       allow read: if true;
       allow write: if false;
