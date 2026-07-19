@@ -1341,8 +1341,62 @@
     from{transform:translateX(-50px);}
     to{transform:translateX(220px);}
 }
+
+    /* --- Hedefli arayüz animasyonları: işleyiş ve yerleşim değişmez --- */
+    .dashboard-mini-card{
+      transition:transform 190ms ease,box-shadow 190ms ease;
+    }
+    .dashboard-mini-card:hover{
+      transform:translateY(-3px);
+      box-shadow:0 12px 26px rgba(15,23,42,.10);
+    }
+
+    #view > .panel,
+    #view > .section-card,
+    #view > .two-grid > .panel,
+    #recordForm .section-card{
+      animation:modulePanelEnter .40s ease-out backwards;
+    }
+    @keyframes modulePanelEnter{
+      from{opacity:0;transform:translateY(6px);}
+      to{opacity:1;transform:translateY(0);}
+    }
+
+    .btn:active{
+      transform:translateY(1px) scale(.98)!important;
+      transition-duration:80ms!important;
+    }
+
+    .dashboard-stat-cards .stat-card{
+      animation:dashboardCardEnter .45s ease-out backwards;
+    }
+    .dashboard-stat-cards .stat-card:nth-child(1){animation-delay:.04s;}
+    .dashboard-stat-cards .stat-card:nth-child(2){animation-delay:.08s;}
+    .dashboard-stat-cards .stat-card:nth-child(3){animation-delay:.12s;}
+    .dashboard-stat-cards .stat-card:nth-child(4){animation-delay:.16s;}
+    .dashboard-stat-cards .stat-card:nth-child(5){animation-delay:.20s;}
+    @keyframes dashboardCardEnter{
+      from{opacity:0;transform:translateY(10px);}
+      to{opacity:1;transform:translateY(0);}
+    }
+
+    .nav button.active{
+      animation:activeNavEnter .30s ease-out backwards;
+    }
+    @keyframes activeNavEnter{
+      from{opacity:.75;transform:translateX(-5px);}
+      to{opacity:1;transform:translateX(0);}
+    }
+
     @media (prefers-reduced-motion:reduce){
-      #topTitle.top-title-enter,.topbar::before{animation:none!important;}
+      #topTitle.top-title-enter,
+      .topbar::before,
+      #view > .panel,
+      #view > .section-card,
+      #view > .two-grid > .panel,
+      #recordForm .section-card,
+      .dashboard-stat-cards .stat-card,
+      .nav button.active{animation:none!important;}
     }
   </style>
 </head>
