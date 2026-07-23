@@ -28,21 +28,28 @@ jobs:
             echo "::error::STREAMLIT_APP_URL secret is not defined."
             exit 1
           fi
+          if [[ "$APP_URL" != https://*.streamlit.app* ]]; then
+            echo "::error::STREAMLIT_APP_URL must be a https://...streamlit.app address."
+            exit 1
+          fi
 
-      - name: Visit Streamlit application
+      - name: Visit Streamlit health endpoint
         env:
           APP_URL: ${{ secrets.STREAMLIT_APP_URL }}
         shell: bash
         run: |
+          APP_URL="${APP_URL%/}"
+          HEALTH_URL="${APP_URL}/_stcore/health"
+
           curl \
             --fail \
             --location \
+            --max-redirs 5 \
             --retry 3 \
             --retry-all-errors \
             --connect-timeout 20 \
             --max-time 60 \
             --user-agent "Mozilla/5.0 (compatible; EVENTIX-Keep-Awake/1.0)" \
-            --output /dev/null \
             --silent \
             --show-error \
-            "$APP_URL"
+            "$HEALTH_URL"
